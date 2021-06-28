@@ -93,7 +93,9 @@ macro_rules! write {
 
 macro_rules! nop {
     () => {
-        |cpu: &mut Z80<Execute>| { }
+        |cpu: &mut Z80<Execute>| {
+            m_time!(cpu, 1);
+        }
     }
 }
 
@@ -276,22 +278,33 @@ mod tests {
     use super::*;
     use std::fs::read_dir;
 
-    macro_rules! assert_decode {
-        ($opcode:expr, $macro:tt) => {
+    macro_rules! assert_instruction {
+        (
+            $opcode:tt | $macro:tt $body:tt
+            {$($initReg:tt : $initRegValue:tt),*}
+            {$($initMem:tt : $initMemValue:tt),*}
+            {$($expectedReg:tt : $expectedRegValue:tt),*}
+            {$($expectedMem:tt : $expectedMemValue:tt),*}
+        ) => {
             {
-                let cpu = cpu_decode($opcode);
-                let function = $macro!();
+                let mut cpu = cpu_decode($opcode);
+                let function = $macro!$body;
                 let expected = Instruction::new($opcode, function);
+                $(
+                    cpu.registers.$initReg = $initRegValue;
+                )*
+                $(
+                    cpu.mmu.write_u8($initMem, $initMemValue);
+                )*
                 assert_eq!(cpu.s.instruction.opcode, expected.opcode);
-            }
-        };
-        ($opcode:expr, $macro:tt, $($body:tt)+) => {
-            {
-                let cpu = cpu_decode($opcode);
-                let function = $macro!($($body)+);
-                let expected = Instruction::new($opcode, function);
-                assert_eq!(cpu.s.instruction.opcode, expected.opcode);
-            }
+                (function)(&mut cpu);
+                $(
+                    assert_eq!(cpu.registers.$expectedReg, $expectedRegValue);
+                )*
+                $(
+                    assert_eq!(cpu.mmu.read_u8($expectedMem), $expectedMemValue);
+                )*
+            };
         }
     }
 
@@ -428,23 +441,43 @@ mod tests {
     }
 
     #[test]
-    fn nop_execute() {
-        let mut cpu = cpu_decode(0x00);
-        let expected_m = cpu.registers.m;
-        let expected_t = cpu.registers.t;
-        let function = nop!();
-        (function)(&mut cpu);
-        assert_eq!(expected_m, cpu.registers.m);
-        assert_eq!(expected_t, cpu.registers.t);
-    }
-
-    #[test]
-    fn nop_decode() {
-        assert_decode!(0x00, nop)
+    fn nop() {
+        assert_instruction!(
+            0x00 | nop ()
+            // Setup registers
+            {}
+            // Setup memory
+            {}
+            // Assert registers
+            {
+                m : 1,
+                t : 4
+            }
+            // Assert memory
+            {}
+        )
     }
 
     #[test]
     fn ld_bc_u16_decode() {
-        assert_decode!(0x01, ld, [b, c], [u16])
+        let upper = 2;
+        let lower = 1;
+        assert_instruction!(
+            0x01 | ld ([b, c], [u16])
+            // Setup registers
+            {}
+            // Setup memory
+            {
+                0 : upper,
+                1 : lower
+            }
+            // Assert registers
+            {
+                b : upper,
+                c : lower
+            }
+            // Assert memory
+            {}
+        )
     }
 }
