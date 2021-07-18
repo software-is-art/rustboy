@@ -26,6 +26,11 @@ macro_rules! reg_set {
         $(
             $cpu.registers.$target = $value;
         )+
+    };
+    ($cpu:expr, {$($target:tt : $value:expr),+}) => {
+        $(
+            $cpu.registers.$target = $value;
+        )+
     }
 }
 
@@ -34,13 +39,10 @@ macro_rules! mem_set {
         $(
             $cpu.mmu.write_u8($target, $value);
         )+
-    }
-}
-
-macro_rules! reg_assert_eq {
-    ($cpu:expr, $($target:tt=$value:expr),+) => {
+    };
+    ($cpu:expr, {$($target:tt : $value:expr),+}) => {
         $(
-            assert_eq!($cpu.registers.$target, $value);
+            $cpu.mmu.write_u8($target, $value);
         )+
     }
 }
@@ -277,32 +279,37 @@ impl Mmu {
 mod tests {
     use super::*;
     use std::fs::read_dir;
+    macro_rules! reg_eq {
+        ($cpu:expr, $($target:tt=$value:expr),+) => {
+            $(
+                assert_eq!($cpu.registers.$target, $value);
+            )+
+        };
+        ($cpu:expr, {$($target:tt : $value:expr),+}) => {
+            $(
+                assert_eq!($cpu.registers.$target, $value);
+            )+
+        }
+    }
 
     macro_rules! assert_instruction {
         (
-            $opcode:tt | $macro:tt $body:tt
-            {$($initReg:tt : $initRegValue:tt),*}
-            {$($initMem:tt : $initMemValue:tt),*}
-            {$($expectedReg:tt : $expectedRegValue:tt),*}
-            {$($expectedMem:tt : $expectedMemValue:tt),*}
+            opcode : $opcode:tt
+            $macro:tt : $body:tt
+            setup : {$($setupMacro:tt : $setupBody:tt),*}
+            assert : {$($assertMacro:tt : $assertBody:tt),*}
         ) => {
             {
                 let mut cpu = cpu_decode($opcode);
                 let function = $macro!$body;
                 let expected = Instruction::new($opcode, function);
                 $(
-                    cpu.registers.$initReg = $initRegValue;
-                )*
-                $(
-                    cpu.mmu.write_u8($initMem, $initMemValue);
+                    $setupMacro!(cpu, $setupBody);
                 )*
                 assert_eq!(cpu.s.instruction.opcode, expected.opcode);
                 (function)(&mut cpu);
                 $(
-                    assert_eq!(cpu.registers.$expectedReg, $expectedRegValue);
-                )*
-                $(
-                    assert_eq!(cpu.mmu.read_u8($expectedMem), $expectedMemValue);
+                    $assertMacro!(cpu, $assertBody);
                 )*
             };
         }
@@ -432,29 +439,26 @@ mod tests {
 
         // LD BC, u16
         ld!([b, c], [u16])(&mut cpu);
-        reg_assert_eq!(cpu, b=upper, c=lower);
+        reg_eq!(cpu, b=upper, c=lower);
 
         // LD BC, HL
         reg_set!(cpu, b=0, c=0, h=upper, l=lower);
         ld!([b, c], [h, l])(&mut cpu);
-        reg_assert_eq!(cpu, b=upper, c=lower, h=upper, l=lower);
+        reg_eq!(cpu, b=upper, c=lower, h=upper, l=lower);
     }
 
     #[test]
     fn nop() {
         assert_instruction!(
-            0x00 | nop ()
-            // Setup registers
-            {}
-            // Setup memory
-            {}
-            // Assert registers
-            {
-                m : 1,
-                t : 4
+            opcode : 0x00
+            nop : [ ]
+            setup : { }
+            assert : {
+                reg_eq : {
+                    m : 1,
+                    t : 4
+                }
             }
-            // Assert memory
-            {}
         )
     }
 
@@ -462,22 +466,21 @@ mod tests {
     fn ld_bc_u16_decode() {
         let upper = 2;
         let lower = 1;
-        assert_instruction!(
-            0x01 | ld ([b, c], [u16])
-            // Setup registers
-            {}
-            // Setup memory
-            {
-                0 : upper,
-                1 : lower
+        assert_instruction! {
+            opcode : 0x01
+            ld : [ [b, c], [u16] ]
+            setup : {
+                mem_set : {
+                    0 : upper,
+                    1 : lower
+                }
             }
-            // Assert registers
-            {
-                b : upper,
-                c : lower
+            assert : {
+                reg_eq : {
+                    b : upper,
+                    c : lower
+                }
             }
-            // Assert memory
-            {}
-        )
+        }
     }
 }
