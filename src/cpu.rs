@@ -26,6 +26,11 @@ macro_rules! reg_set {
         $(
             $cpu.registers.$target = $value;
         )+
+    };
+    ($cpu:expr, {$($target:tt : $value:expr),+}) => {
+        $(
+            $cpu.registers.$target = $value;
+        )+
     }
 }
 
@@ -34,13 +39,10 @@ macro_rules! mem_set {
         $(
             $cpu.mmu.write_u8($target, $value);
         )+
-    }
-}
-
-macro_rules! reg_assert_eq {
-    ($cpu:expr, $($target:tt=$value:expr),+) => {
+    };
+    ($cpu:expr, {$($target:tt : $value:expr),+}) => {
         $(
-            assert_eq!($cpu.registers.$target, $value);
+            $cpu.mmu.write_u8($target, $value);
         )+
     }
 }
@@ -89,6 +91,14 @@ macro_rules! write {
     ($cpu:expr, $r:tt, $value:expr) => {
         $cpu.registers.$r = $value;
     };
+}
+
+macro_rules! nop {
+    () => {
+        |cpu: &mut Z80<Execute>| {
+            m_time!(cpu, 1);
+        }
+    }
 }
 
 macro_rules! ld {
@@ -189,7 +199,7 @@ impl Z80<Fetch> {
 impl Z80<Decode> {
     fn decode(self) -> Z80<Execute> {
         let function = match self.s.opcode {
-            0x00 => nop(),
+            0x00 => nop!(),
             0x01 => ld!([b, c], [u16]),
             _ => panic!("Uh, oh")
         };
@@ -265,14 +275,45 @@ impl Mmu {
     }
 }
 
-fn nop() -> fn(&mut Z80<Execute>) {
-    |cpu| { }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::fs::read_dir;
+    macro_rules! reg_eq {
+        ($cpu:expr, $($target:tt=$value:expr),+) => {
+            $(
+                assert_eq!($cpu.registers.$target, $value);
+            )+
+        };
+        ($cpu:expr, {$($target:tt : $value:expr),+}) => {
+            $(
+                assert_eq!($cpu.registers.$target, $value);
+            )+
+        }
+    }
+
+    macro_rules! assert_instruction {
+        (
+            opcode : $opcode:tt
+            $macro:tt : $body:tt
+            setup : {$($setupMacro:tt : $setupBody:tt),*}
+            assert : {$($assertMacro:tt : $assertBody:tt),*}
+        ) => {
+            {
+                let mut cpu = cpu_decode($opcode);
+                let function = $macro!$body;
+                let expected = Instruction::new($opcode, function);
+                $(
+                    $setupMacro!(cpu, $setupBody);
+                )*
+                assert_eq!(cpu.s.instruction.opcode, expected.opcode);
+                (function)(&mut cpu);
+                $(
+                    $assertMacro!(cpu, $assertBody);
+                )*
+            };
+        }
+    }
 
     fn cpu_decode(opcode: u8) -> Z80<Execute> {
         Z80 {
@@ -310,6 +351,12 @@ mod tests {
                 t: 0
             }
         )
+    }
+
+    #[test]
+    fn cpu_pipeline() {
+        let mmu = Mmu::new();
+        let fetcher = Z80::<Fetch>::new().fetch().decode().execute();
     }
 
     #[test]
@@ -392,37 +439,48 @@ mod tests {
 
         // LD BC, u16
         ld!([b, c], [u16])(&mut cpu);
-        reg_assert_eq!(cpu, b=upper, c=lower);
+        reg_eq!(cpu, b=upper, c=lower);
 
         // LD BC, HL
         reg_set!(cpu, b=0, c=0, h=upper, l=lower);
         ld!([b, c], [h, l])(&mut cpu);
-        reg_assert_eq!(cpu, b=upper, c=lower, h=upper, l=lower);
+        reg_eq!(cpu, b=upper, c=lower, h=upper, l=lower);
     }
 
     #[test]
-    fn nop_execute() {
-        let mut cpu = cpu_decode(0x00);
-        let expected_m = cpu.registers.m;
-        let expected_t = cpu.registers.t;
-        let function = nop();
-        (function)(&mut cpu);
-        assert_eq!(expected_m, cpu.registers.m);
-        assert_eq!(expected_t, cpu.registers.t);
+    fn nop() {
+        assert_instruction!(
+            opcode : 0x00
+            nop : [ ]
+            setup : { }
+            assert : {
+                reg_eq : {
+                    m : 1,
+                    t : 4
+                }
+            }
+        )
     }
 
     #[test]
-    fn nop_decode() {
-        let opcode = 0x00 as u8;
-        let cpu = cpu_decode(opcode);
-        let function = nop();
-        let expected = Instruction::new(opcode, function);
-        assert_eq!(cpu.s.instruction.opcode, expected.opcode);
-    }
-
-    #[test]
-    fn cpu_pipeline() {
-        let mmu = Mmu::new();
-        let fetcher = Z80::<Fetch>::new().fetch().decode().execute();
+    fn ld_bc_u16_decode() {
+        let upper = 2;
+        let lower = 1;
+        assert_instruction! {
+            opcode : 0x01
+            ld : [ [b, c], [u16] ]
+            setup : {
+                mem_set : {
+                    0 : upper,
+                    1 : lower
+                }
+            }
+            assert : {
+                reg_eq : {
+                    b : upper,
+                    c : lower
+                }
+            }
+        }
     }
 }
