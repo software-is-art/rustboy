@@ -104,6 +104,7 @@ macro_rules! write {
 macro_rules! nop {
     () => {
         |cpu: &mut Z80<Execute>| {
+            m_time!(cpu, 1);
         }
     }
 }
@@ -113,6 +114,16 @@ macro_rules! ld {
         |cpu: &mut Z80<Execute>| {
             let val = read!(cpu, $($source)+);
             write!(cpu, $($target)+, val);
+            m_time!(cpu, 1);
+        }
+    }
+}
+
+macro_rules! inc {
+    ([$($target:tt)+]) => {
+        |cpu: &mut Z80<Execute>| {
+            let val = read!(cpu, $($target)+);
+            write!(cpu, $($target)+, val + 1);
         }
     }
 }
@@ -196,8 +207,6 @@ impl Z80<Fetch> {
             },
             registers: Registers {
                 pc: self.registers.pc + 1,
-                m: self.registers.m + 1,
-                t: self.registers.t + 4,
                 ..self.registers
             },
             mmu: self.mmu
@@ -210,6 +219,8 @@ impl Z80<Decode> {
         let function = match self.s.opcode {
             0x00 => nop!(),
             0x01 => ld!([b, c], [u16]),
+            0x02 => ld!([(b, c)], [a]),
+            0x03 => inc!([b, c]),
             _ => panic!("Uh, oh")
         };
 
@@ -333,15 +344,10 @@ mod tests {
     }
 
     fn cpu_decode(opcode: u8) -> Z80<Execute> {
-        let reg = Registers::new();
         Z80 {
             s: Decode { opcode },
             mmu: Mmu::new(),
-            registers: Registers {
-                m : 1,
-                t : 4,
-                .. reg
-            }
+            registers: Registers::new()
         }.decode()
     }
 
@@ -509,7 +515,7 @@ mod tests {
     #[test]
     fn ld_bc_a_indirect() {
         assert_instruction! {
-            opcode : 0x01
+            opcode : 0x02
             ld : [ [(b, c)], [a] ]
             setup : {
                 reg_set : {
@@ -528,6 +534,28 @@ mod tests {
                 },
                 mem_eq : {
                     (1, 1) : 22
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn inc_bc() {
+        assert_instruction! {
+            opcode : 0x03
+            inc : [ [b, c] ]
+            setup : {
+                reg_set : {
+                    b : 1,
+                    c : 1
+                }
+            }
+            assert : {
+                reg_eq : {
+                    b : 1,
+                    c : 2,
+                    m : 2,
+                    t : 8
                 }
             }
         }
