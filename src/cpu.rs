@@ -54,14 +54,21 @@ macro_rules! read {
             $cpu.registers.pc += 1;
             let lower = $cpu.mmu.read_u8($cpu.registers.pc);
             $cpu.registers.pc += 1;
+            m_time!($cpu, 1);
             concat_u8!(upper, lower)
         }
     };
     ($cpu:expr, ($high:tt, $low:tt)) => {
-        $cpu.mmu.read_u8(read!($cpu, $high, $low))
+        {
+            m_time!($cpu, 1);
+            $cpu.mmu.read_u8(read!($cpu, $high, $low))
+        }
     };
     ($cpu:expr, $high:tt, $low:tt) => {
-        concat_u8!($cpu.registers.$high, $cpu.registers.$low)
+        {
+            m_time!($cpu, 1);
+            concat_u8!($cpu.registers.$high, $cpu.registers.$low)
+        }
     };
     ($cpu:expr, $r:tt) => {
         $cpu.registers.$r
@@ -75,17 +82,18 @@ macro_rules! write {
             let address = read!($cpu, u16);
             $cpu.mmu.write_u8(address, low);
             $cpu.mmu.write_u8(address + 1, high);
-            m_time!($cpu, 3);
+            m_time!($cpu, 1);
         }
     };
     ($cpu:expr, ($high:tt, $low:tt), $value:expr) => {
-        $cpu.mmu.write_u8(read!($cpu, $high, $low), $value);
+        $cpu.mmu.write_u8(read!($cpu, $high, $low), $value)
     };
     ($cpu:expr, $high:tt, $low:tt, $value:expr) => {
         {
             let (upper, lower) = split_u16!($value);
             $cpu.registers.$high = upper;
             $cpu.registers.$low = lower;
+            m_time!($cpu, 1);
         }
     };
     ($cpu:expr, $r:tt, $value:expr) => {
@@ -96,7 +104,6 @@ macro_rules! write {
 macro_rules! nop {
     () => {
         |cpu: &mut Z80<Execute>| {
-            m_time!(cpu, 1);
         }
     }
 }
@@ -189,6 +196,8 @@ impl Z80<Fetch> {
             },
             registers: Registers {
                 pc: self.registers.pc + 1,
+                m: self.registers.m + 1,
+                t: self.registers.t + 4,
                 ..self.registers
             },
             mmu: self.mmu
@@ -292,6 +301,14 @@ mod tests {
         }
     }
 
+    macro_rules! mem_eq {
+        ($cpu:expr, {$(($high:expr, $low:expr) : $value:expr),+}) => {
+            $(
+                assert_eq!($cpu.mmu.read_u8(concat_u8!($high, $low)), $value);
+            )+
+        }
+    }
+
     macro_rules! assert_instruction {
         (
             opcode : $opcode:tt
@@ -316,10 +333,15 @@ mod tests {
     }
 
     fn cpu_decode(opcode: u8) -> Z80<Execute> {
+        let reg = Registers::new();
         Z80 {
             s: Decode { opcode },
             mmu: Mmu::new(),
-            registers: Registers::new()
+            registers: Registers {
+                m : 1,
+                t : 4,
+                .. reg
+            }
         }.decode()
     }
 
@@ -463,22 +485,49 @@ mod tests {
     }
 
     #[test]
-    fn ld_bc_u16_decode() {
-        let upper = 2;
-        let lower = 1;
+    fn ld_bc_u16() {
         assert_instruction! {
             opcode : 0x01
             ld : [ [b, c], [u16] ]
             setup : {
                 mem_set : {
-                    0 : upper,
-                    1 : lower
+                    0 : 2,
+                    1 : 1
                 }
             }
             assert : {
                 reg_eq : {
-                    b : upper,
-                    c : lower
+                    b : 2,
+                    c : 1,
+                    m : 3,
+                    t : 12
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn ld_bc_a_indirect() {
+        assert_instruction! {
+            opcode : 0x01
+            ld : [ [(b, c)], [a] ]
+            setup : {
+                reg_set : {
+                    a : 22,
+                    b: 1,
+                    c: 1
+                }
+            }
+            assert : {
+                reg_eq : {
+                    a : 22,
+                    b : 1,
+                    c : 1,
+                    m : 2,
+                    t : 8
+                },
+                mem_eq : {
+                    (1, 1) : 22
                 }
             }
         }
