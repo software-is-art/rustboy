@@ -97,7 +97,10 @@ macro_rules! write {
         }
     };
     ($cpu:expr, $r:tt, $value:expr) => {
-        $cpu.registers.$r = $value;
+        {
+            $cpu.registers.$r = $value;
+            m_time!($cpu, 1);
+        }
     };
 }
 
@@ -120,10 +123,21 @@ macro_rules! ld {
 }
 
 macro_rules! inc {
-    ([$($target:tt)+]) => {
+    ($target:tt) => {
+        |cpu: &mut Z80<Execute>| {
+            let current = read!(cpu, $target);
+            let new = current.wrapping_add(1);
+            cpu.registers.f &= 0b0001_0000;
+            let z = if new == 0 { 0b1000_0000 } else { 0b0000_0000 };
+            let h = (((current ^ 1) ^ new) & 0b0001_0000) << 1;
+            cpu.registers.f |= z | h;
+            write!(cpu, $target, new);
+        }
+    };
+    ($($target:tt)+) => {
         |cpu: &mut Z80<Execute>| {
             let val = read!(cpu, $($target)+);
-            write!(cpu, $($target)+, val + 1);
+            write!(cpu, $($target)+, val.wrapping_add(1));
         }
     }
 }
@@ -220,7 +234,8 @@ impl Z80<Decode> {
             0x00 => nop!(),
             0x01 => ld!([b, c], [u16]),
             0x02 => ld!([(b, c)], [a]),
-            0x03 => inc!([b, c]),
+            0x03 => inc!(b, c),
+            0x04 => inc!(b),
             _ => panic!("Uh, oh")
         };
 
@@ -328,16 +343,21 @@ mod tests {
             assert : {$($assertMacro:tt : $assertBody:tt),*}
         ) => {
             {
-                let mut cpu = cpu_decode($opcode);
+                let mut cpuA = cpu_decode($opcode);
+                let mut cpuB = cpu_decode($opcode);
                 let function = $macro!$body;
-                let expected = Instruction::new($opcode, function);
                 $(
-                    $setupMacro!(cpu, $setupBody);
+                    $setupMacro!(cpuA, $setupBody);
+                    $setupMacro!(cpuB, $setupBody);
                 )*
-                assert_eq!(cpu.s.instruction.opcode, expected.opcode);
-                (function)(&mut cpu);
+                assert_eq!(cpuA.s.instruction.opcode, $opcode);
+                (function)(&mut cpuA);
                 $(
-                    $assertMacro!(cpu, $assertBody);
+                    $assertMacro!(cpuA, $assertBody);
+                )*
+                (cpuB.s.instruction.function)(&mut cpuB);
+                $(
+                    $assertMacro!(cpuB, $assertBody);
                 )*
             };
         }
@@ -484,7 +504,8 @@ mod tests {
             assert : {
                 reg_eq : {
                     m : 1,
-                    t : 4
+                    t : 4,
+                    f : 0
                 }
             }
         )
@@ -506,7 +527,8 @@ mod tests {
                     b : 2,
                     c : 1,
                     m : 3,
-                    t : 12
+                    t : 12,
+                    f : 0
                 }
             }
         }
@@ -530,7 +552,8 @@ mod tests {
                     b : 1,
                     c : 1,
                     m : 2,
-                    t : 8
+                    t : 8,
+                    f : 0
                 },
                 mem_eq : {
                     (1, 1) : 22
@@ -543,7 +566,7 @@ mod tests {
     fn inc_bc() {
         assert_instruction! {
             opcode : 0x03
-            inc : [ [b, c] ]
+            inc : [ b, c ]
             setup : {
                 reg_set : {
                     b : 1,
@@ -555,7 +578,89 @@ mod tests {
                     b : 1,
                     c : 2,
                     m : 2,
-                    t : 8
+                    t : 8,
+                    f : 0
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn inc_b() {
+        assert_instruction! {
+            opcode : 0x04
+            inc : [ b ]
+            setup : { }
+            assert : {
+                reg_eq : {
+                    m : 1,
+                    t : 4,
+                    b : 1,
+                    f : 0
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn inc_b_sets_half_carry_flag() {
+        assert_instruction! {
+            opcode : 0x04
+            inc : [ b ]
+            setup : {
+                reg_set : {
+                    b : 0b0000_1111
+                }
+            }
+            assert : {
+                reg_eq : {
+                    m : 1,
+                    t : 4,
+                    b : 0b0001_0000,
+                    f : 0b0010_0000
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn inc_b_sets_zero_flag() {
+        assert_instruction! {
+            opcode : 0x04
+            inc : [ b ]
+            setup : {
+                reg_set : {
+                    b : 0b1111_1111
+                }
+            }
+            assert : {
+                reg_eq : {
+                    m : 1,
+                    t : 4,
+                    b : 0,
+                    f : 0b1010_0000
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn inc_b_clears_negative_flag() {
+        assert_instruction! {
+            opcode : 0x04
+            inc : [ b ]
+            setup : {
+                reg_set : {
+                    b : 0,
+                    f : 0b0100_0000
+                }
+            }
+            assert : {
+                reg_eq : {
+                    m : 1,
+                    t : 4,
+                    b : 1,
+                    f : 0
                 }
             }
         }
