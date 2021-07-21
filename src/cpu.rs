@@ -142,6 +142,21 @@ macro_rules! inc {
     }
 }
 
+macro_rules! dec {
+    ($target:tt) => {
+        |cpu: &mut Z80<Execute>| {
+            let current = read!(cpu, $target);
+            let new = current.wrapping_sub(1);
+            cpu.registers.f &= 0b0001_0000;
+            let z = if new == 0 { 0b1000_0000 } else { 0b0000_0000 };
+            let h = (((current ^ 1) ^ new) & 0b0001_0000) << 1;
+            const N : u8 = 0b0100_0000;
+            cpu.registers.f |= z | h | N;
+            write!(cpu, $target, new);
+        }
+    }
+}
+
 #[derive(Debug, PartialEq)]
 struct Z80<S: State> {
     registers: Registers,
@@ -236,6 +251,7 @@ impl Z80<Decode> {
             0x02 => ld!([(b, c)], [a]),
             0x03 => inc!(b, c),
             0x04 => inc!(b),
+            0x05 => dec!(b),
             _ => panic!("Uh, oh")
         };
 
@@ -652,7 +668,7 @@ mod tests {
             setup : {
                 reg_set : {
                     b : 0,
-                    f : 0b0100_0000
+                    f : 0b1110_0000
                 }
             }
             assert : {
@@ -661,6 +677,91 @@ mod tests {
                     t : 4,
                     b : 1,
                     f : 0
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn dec_b() {
+        assert_instruction! {
+            opcode : 0x05
+            dec : [ b ]
+            setup : {
+                reg_set : {
+                    b : 2
+                }
+            }
+            assert : {
+                reg_eq : {
+                    m : 1,
+                    t : 4,
+                    b : 1,
+                    f : 0b0100_0000
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn dec_b_sets_zero_flag() {
+        assert_instruction! {
+            opcode : 0x05
+            dec : [ b ]
+            setup : {
+                reg_set : {
+                    b : 1
+                }
+            }
+            assert : {
+                reg_eq : {
+                    m : 1,
+                    t : 4,
+                    b : 0,
+                    f : 0b1100_0000
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn dec_b_sets_half_carry_flag() {
+        assert_instruction! {
+            opcode : 0x05
+            dec : [ b ]
+            setup : {
+                reg_set : {
+                    b : 0b0001_0000
+                }
+            }
+            assert : {
+                reg_eq : {
+                    m : 1,
+                    t : 4,
+                    b : 0b0000_1111,
+                    f : 0b0110_0000
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn dec_b_sets_neg_flag() {
+        assert_instruction! {
+            opcode : 0x05
+            dec : [ b ]
+            setup : {
+                reg_set : {
+                    b : 2,
+                    f : 0b1110_0000
+                }
+            }
+            assert : {
+                reg_eq : {
+                    m : 1,
+                    t : 4,
+                    b : 1,
+                    f : 0b0100_0000
                 }
             }
         }
