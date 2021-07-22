@@ -164,6 +164,17 @@ macro_rules! dec {
     }
 }
 
+macro_rules! rlca {
+    () => {
+        |cpu: &mut Z80<Execute>| {
+            let val = read!(cpu, a);
+            let c = (val & 0b1000_0000) >> 7;
+            cpu.registers.f = c << 4;
+            write!(cpu, a, (val << 1) | c);
+        }
+    }
+}
+
 #[derive(Debug, PartialEq)]
 struct Z80<S: State> {
     registers: Registers,
@@ -260,6 +271,7 @@ impl Z80<Decode> {
             0x04 => inc!(b),
             0x05 => dec!(b),
             0x06 => ld!([b], [u8]),
+            0x07 => rlca!(),
             _ => panic!("Uh, oh")
         };
 
@@ -792,6 +804,28 @@ mod tests {
                     t : 8,
                     b : 2,
                     pc : 1
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn rlca() {
+        assert_instruction! {
+            opcode : 0x07
+            rlca : [ ]
+            setup : {
+                reg_set : {
+                    a : 0x95,
+                    f : 0b0001_0000
+                }
+            }
+            assert : {
+                reg_eq : {
+                    m : 1,
+                    t : 4,
+                    a : 0x2B,
+                    f : 0b0001_0000
                 }
             }
         }
