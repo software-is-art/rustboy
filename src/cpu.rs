@@ -259,6 +259,7 @@ impl Z80<Decode> {
             0x03 => inc!(b, c),
             0x04 => inc!(b),
             0x05 => dec!(b),
+            0x06 => ld!([b], [u8]),
             _ => panic!("Uh, oh")
         };
 
