@@ -58,6 +58,13 @@ macro_rules! read {
             concat_u8!(upper, lower)
         }
     };
+    ($cpu:expr, u8) => {
+        {
+            let val = $cpu.mmu.read_u8($cpu.registers.pc);
+            $cpu.registers.pc += 1;
+            val
+        }
+    };
     ($cpu:expr, ($high:tt, $low:tt)) => {
         {
             m_time!($cpu, 1);
@@ -252,6 +259,7 @@ impl Z80<Decode> {
             0x03 => inc!(b, c),
             0x04 => inc!(b),
             0x05 => dec!(b),
+            0x06 => ld!([b], [u8]),
             _ => panic!("Uh, oh")
         };
 
@@ -544,7 +552,8 @@ mod tests {
                     c : 1,
                     m : 3,
                     t : 12,
-                    f : 0
+                    f : 0,
+                    pc : 2
                 }
             }
         }
@@ -762,6 +771,27 @@ mod tests {
                     t : 4,
                     b : 1,
                     f : 0b0100_0000
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn ld_b_u8() {
+        assert_instruction! {
+            opcode : 0x06
+            ld : [ [b], [u8] ]
+            setup : {
+                mem_set : {
+                    0 : 2
+                }
+            }
+            assert : {
+                reg_eq : {
+                    m : 2,
+                    t : 8,
+                    b : 2,
+                    pc : 1
                 }
             }
         }
