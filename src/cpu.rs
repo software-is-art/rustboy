@@ -35,6 +35,11 @@ macro_rules! reg_set {
 }
 
 macro_rules! mem_set {
+    ($cpu:expr, {$(($high:expr, $low:expr) : $value:expr),+}) => {
+        $(
+            $cpu.mmu.write_u8(concat_u8!($high, $low), $value);
+        )+
+    };
     ($cpu:expr, $($target:tt=$value:expr),+) => {
         $(
             $cpu.mmu.write_u8($target, $value);
@@ -68,6 +73,7 @@ macro_rules! read {
     };
     ($cpu:expr, ($high:tt, $low:tt)) => {
         {
+            m_time!($cpu, 1);
             $cpu.mmu.read_u8(read!($cpu, $high, $low))
         }
     };
@@ -308,6 +314,7 @@ impl Z80<Decode> {
             0x07 => rlca!(),
             0x08 => ld!([u16], [sp]),
             0x09 => add!([h, l], [b, c]),
+            0x0A => ld!([a], [(b, c)]),
             0x17 => rla!(),
             _ => panic!("Uh, oh")
         };
@@ -582,7 +589,8 @@ mod tests {
                 reg_eq : {
                     m : 1,
                     t : 4,
-                    f : 0
+                    f : 0,
+                    pc : 1
                 }
             }
         )
@@ -631,7 +639,8 @@ mod tests {
                     c : 1,
                     m : 2,
                     t : 8,
-                    f : 0
+                    f : 0,
+                    pc : 1
                 },
                 mem_eq : {
                     (1, 1) : 22
@@ -657,7 +666,8 @@ mod tests {
                     c : 3,
                     m : 2,
                     t : 8,
-                    f : 0
+                    f : 0,
+                    pc : 1
                 }
             }
         }
@@ -674,7 +684,8 @@ mod tests {
                     m : 1,
                     t : 4,
                     b : 1,
-                    f : 0
+                    f : 0,
+                    pc : 1
                 }
             }
         }
@@ -695,7 +706,8 @@ mod tests {
                     m : 1,
                     t : 4,
                     b : 0b0001_0000,
-                    f : 0b0010_0000
+                    f : 0b0010_0000,
+                    pc : 1
                 }
             }
         }
@@ -716,7 +728,8 @@ mod tests {
                     m : 1,
                     t : 4,
                     b : 0,
-                    f : 0b1010_0000
+                    f : 0b1010_0000,
+                    pc : 1
                 }
             }
         }
@@ -738,7 +751,8 @@ mod tests {
                     m : 1,
                     t : 4,
                     b : 1,
-                    f : 0
+                    f : 0,
+                    pc : 1
                 }
             }
         }
@@ -759,7 +773,8 @@ mod tests {
                     m : 1,
                     t : 4,
                     b : 1,
-                    f : 0b0100_0000
+                    f : 0b0100_0000,
+                    pc : 1
                 }
             }
         }
@@ -780,7 +795,8 @@ mod tests {
                     m : 1,
                     t : 4,
                     b : 0,
-                    f : 0b1100_0000
+                    f : 0b1100_0000,
+                    pc : 1
                 }
             }
         }
@@ -801,7 +817,8 @@ mod tests {
                     m : 1,
                     t : 4,
                     b : 0b0000_1111,
-                    f : 0b0110_0000
+                    f : 0b0110_0000,
+                    pc : 1
                 }
             }
         }
@@ -823,7 +840,8 @@ mod tests {
                     m : 1,
                     t : 4,
                     b : 1,
-                    f : 0b0100_0000
+                    f : 0b0100_0000,
+                    pc : 1
                 }
             }
         }
@@ -866,7 +884,8 @@ mod tests {
                     m : 1,
                     t : 4,
                     a : 0x2B,
-                    f : 0b0001_0000
+                    f : 0b0001_0000,
+                    pc : 1
                 }
             }
         }
@@ -922,7 +941,8 @@ mod tests {
                     c : 0b0000_0010,
                     h : 0b0000_0101,
                     l : 0b0000_1010,
-                    f : 0b1000_0000
+                    f : 0b1000_0000,
+                    pc : 1
                 }
             }
         }
@@ -944,7 +964,8 @@ mod tests {
                     m : 2,
                     t : 8,
                     h : 0b0001_0000,
-                    f : 0b0010_0000
+                    f : 0b0010_0000,
+                    pc : 1
                 }
             }
         }
@@ -966,7 +987,33 @@ mod tests {
                     m : 2,
                     t : 8,
                     h : 0b0000_1111,
-                    f : 0b0001_0000
+                    f : 0b0001_0000,
+                    pc : 1
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn ld_a_bc_indirect() {
+        assert_instruction! {
+            opcode : 0x0A
+            ld : [[a], [(b, c)]]
+            setup : {
+                reg_set : {
+                    b : 4,
+                    c : 5
+                },
+                mem_set : {
+                    (4, 5) : 10
+                }
+            }
+            assert : {
+                reg_eq : {
+                    m : 2,
+                    t : 8,
+                    a : 10,
+                    pc : 1
                 }
             }
         }
@@ -987,7 +1034,8 @@ mod tests {
                     m : 1,
                     t : 4,
                     a : 0x0A,
-                    f : 0b0001_0000
+                    f : 0b0001_0000,
+                    pc : 1
                 }
             }
         }
