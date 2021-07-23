@@ -88,7 +88,7 @@ macro_rules! read {
 }
 
 macro_rules! write {
-    ($cpu:expr, u16, $value:expr) => {
+    ($cpu:expr, (u16), $value:expr) => {
         {
             let (upper, lower) = split_u16!($value);
             let address = read!($cpu, u16);
@@ -312,7 +312,7 @@ impl Z80<Decode> {
             0x05 => dec!(b),
             0x06 => ld!([b], [u8]),
             0x07 => rlca!(),
-            0x08 => ld!([u16], [sp]),
+            0x08 => ld!([(u16)], [sp]),
             0x09 => add!([h, l], [b, c]),
             0x0A => ld!([a], [(b, c)]),
             0x17 => rla!(),
@@ -895,7 +895,7 @@ mod tests {
     fn ld_u16_sp_indirect() {
         assert_instruction! {
             opcode : 0x08
-            ld : [ [u16], [sp] ]
+            ld : [ [(u16)], [sp] ]
             setup : {
                 reg_set : {
                     sp : 0b1000_1000_0100_0100
