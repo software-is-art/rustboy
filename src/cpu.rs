@@ -191,6 +191,22 @@ macro_rules! rla {
     }
 }
 
+macro_rules! add {
+    ([$($target:tt)+], [$($source:tt)+]) => {
+        |cpu: &mut Z80<Execute>| {
+            let src = u32::from(read!(cpu, $($source)+));
+            let dst = u32::from(read!(cpu, $($target)+));
+            let result = src + dst;
+            let h = (((src ^ dst) ^ result) & 0x1000) >> 7;
+            let c = result >> 12;
+            cpu.registers.f &= 0b1000_0000;
+            cpu.registers.f |= ((h | c) as u8) & 0b0011_0000;
+            write!(cpu, $($target)+, result as u16);
+            m_time!(cpu, 1);
+        }
+    }
+}
+
 #[derive(Debug, PartialEq)]
 struct Z80<S: State> {
     registers: Registers,
@@ -291,6 +307,7 @@ impl Z80<Decode> {
             0x06 => ld!([b], [u8]),
             0x07 => rlca!(),
             0x08 => ld!([u16], [sp]),
+            0x09 => add!([h, l], [b, c]),
             0x17 => rla!(),
             _ => panic!("Uh, oh")
         };
@@ -878,6 +895,78 @@ mod tests {
                 mem_eq : {
                     (0b0010_0010, 0b0001_0001) : 0b0100_0100,
                     (0b0010_0010, 0b0001_0010) : 0b1000_1000
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn add_hl_bc() {
+        assert_instruction! {
+            opcode : 0x09
+            add : [ [h, l], [b, c] ]
+            setup : {
+                reg_set : {
+                    b : 0b0000_0001,
+                    c : 0b0000_0010,
+                    h : 0b0000_0100,
+                    l : 0b0000_1000,
+                    f : 0b1100_0000
+                }
+            }
+            assert : {
+                reg_eq : {
+                    m : 2,
+                    t : 8,
+                    b : 0b0000_0001,
+                    c : 0b0000_0010,
+                    h : 0b0000_0101,
+                    l : 0b0000_1010,
+                    f : 0b1000_0000
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn add_hl_bc_half_carry() {
+        assert_instruction! {
+            opcode : 0x09
+            add : [ [h, l], [b, c] ]
+            setup : {
+                reg_set : {
+                    b : 0b0000_1000,
+                    h : 0b0000_1000
+                }
+            }
+            assert : {
+                reg_eq : {
+                    m : 2,
+                    t : 8,
+                    h : 0b0001_0000,
+                    f : 0b0010_0000
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn add_hl_bc_carry() {
+        assert_instruction! {
+            opcode : 0x09
+            add : [ [h, l], [b, c] ]
+            setup : {
+                reg_set : {
+                    b : 0b1000_1010,
+                    h : 0b1000_0101
+                }
+            }
+            assert : {
+                reg_eq : {
+                    m : 2,
+                    t : 8,
+                    h : 0b0000_1111,
+                    f : 0b0001_0000
                 }
             }
         }
