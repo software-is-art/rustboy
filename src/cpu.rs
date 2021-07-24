@@ -1,4 +1,5 @@
 use std::fmt::{Debug, Formatter, Result};
+use paste::paste;
 
 macro_rules! concat_u8 {
     ($high:expr, $low:expr) => {
@@ -322,6 +323,7 @@ impl Z80<Decode> {
             0x09 => add!([h, l], [b, c]),
             0x0A => ld!([a], [(b, c)]),
             0x0B => dec!(b, c),
+            0x0C => inc!(c),
             0x17 => rla!(),
             _ => panic!("Uh, oh")
         };
@@ -450,8 +452,103 @@ mod tests {
                 $(
                     $assertMacro!(cpuB, $assertBody);
                 )*
-            };
-        }
+            }
+        };
+    }
+
+    macro_rules! assert_inc_x8 {
+        ($operand:tt, $opcode:expr) => {
+            paste! {
+                #[test]
+                fn [<inc_ $operand>]() {
+                    assert_instruction! {
+                        opcode : $opcode
+                        inc : [ $operand ]
+                        setup : {
+                            reg_set : {
+                                f : 0b1111_0000
+                            }
+                        }
+                        assert : {
+                            reg_eq : {
+                                m : 1,
+                                t : 4,
+                                $operand : 1,
+                                f : 0b0001_0000,
+                                pc : 1
+                            }
+                        }
+                    }
+                }
+
+                #[test]
+                fn [<inc_ $operand _sets_half_carry_flag>]() {
+                    assert_instruction! {
+                        opcode : $opcode
+                        inc : [ $operand ]
+                        setup : {
+                            reg_set : {
+                                $operand : 0b0000_1111
+                            }
+                        }
+                        assert : {
+                            reg_eq : {
+                                m : 1,
+                                t : 4,
+                                $operand : 0b0001_0000,
+                                f : 0b0010_0000,
+                                pc : 1
+                            }
+                        }
+                    }
+                }
+
+                #[test]
+                fn [<inc_ $operand _sets_zero_flag>]() {
+                    assert_instruction! {
+                        opcode : $opcode
+                        inc : [ $operand ]
+                        setup : {
+                            reg_set : {
+                                $operand : 0b1111_1111
+                            }
+                        }
+                        assert : {
+                            reg_eq : {
+                                m : 1,
+                                t : 4,
+                                $operand : 0,
+                                f : 0b1010_0000,
+                                pc : 1
+                            }
+                        }
+                    }
+                }
+
+                #[test]
+                fn [<inc_ $operand _clears_negative_flag>]() {
+                    assert_instruction! {
+                        opcode : $opcode
+                        inc : [ $operand ]
+                        setup : {
+                            reg_set : {
+                                $operand : 0,
+                                f : 0b1110_0000
+                            }
+                        }
+                        assert : {
+                            reg_eq : {
+                                m : 1,
+                                t : 4,
+                                $operand : 1,
+                                f : 0,
+                                pc : 1
+                            }
+                        }
+                    }
+                }
+            }
+        };
     }
 
     fn cpu_decode(opcode: u8) -> Z80<Execute> {
@@ -680,90 +777,8 @@ mod tests {
         }
     }
 
-    #[test]
-    fn inc_b() {
-        assert_instruction! {
-            opcode : 0x04
-            inc : [ b ]
-            setup : { }
-            assert : {
-                reg_eq : {
-                    m : 1,
-                    t : 4,
-                    b : 1,
-                    f : 0,
-                    pc : 1
-                }
-            }
-        }
-    }
-
-    #[test]
-    fn inc_b_sets_half_carry_flag() {
-        assert_instruction! {
-            opcode : 0x04
-            inc : [ b ]
-            setup : {
-                reg_set : {
-                    b : 0b0000_1111
-                }
-            }
-            assert : {
-                reg_eq : {
-                    m : 1,
-                    t : 4,
-                    b : 0b0001_0000,
-                    f : 0b0010_0000,
-                    pc : 1
-                }
-            }
-        }
-    }
-
-    #[test]
-    fn inc_b_sets_zero_flag() {
-        assert_instruction! {
-            opcode : 0x04
-            inc : [ b ]
-            setup : {
-                reg_set : {
-                    b : 0b1111_1111
-                }
-            }
-            assert : {
-                reg_eq : {
-                    m : 1,
-                    t : 4,
-                    b : 0,
-                    f : 0b1010_0000,
-                    pc : 1
-                }
-            }
-        }
-    }
-
-    #[test]
-    fn inc_b_clears_negative_flag() {
-        assert_instruction! {
-            opcode : 0x04
-            inc : [ b ]
-            setup : {
-                reg_set : {
-                    b : 0,
-                    f : 0b1110_0000
-                }
-            }
-            assert : {
-                reg_eq : {
-                    m : 1,
-                    t : 4,
-                    b : 1,
-                    f : 0,
-                    pc : 1
-                }
-            }
-        }
-    }
+assert_inc_x8!(b, 0x04);
+assert_inc_x8!(c, 0x0C);
 
     #[test]
     fn dec_b() {
