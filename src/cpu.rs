@@ -324,6 +324,7 @@ impl Z80<Decode> {
             0x0A => ld!([a], [(b, c)]),
             0x0B => dec!(b, c),
             0x0C => inc!(c),
+            0x0D => dec!(c),
             0x17 => rla!(),
             _ => panic!("Uh, oh")
         };
@@ -542,6 +543,101 @@ mod tests {
                                 t : 4,
                                 $operand : 1,
                                 f : 0,
+                                pc : 1
+                            }
+                        }
+                    }
+                }
+            }
+        };
+    }
+
+    macro_rules! assert_dec_x8 {
+        ($operand:tt, $opcode:expr) => {
+            paste! {
+                #[test]
+                fn [<dec_ $operand>]() {
+                    assert_instruction! {
+                        opcode : $opcode
+                        dec : [ $operand ]
+                        setup : {
+                            reg_set : {
+                                $operand : 2
+                            }
+                        }
+                        assert : {
+                            reg_eq : {
+                                m : 1,
+                                t : 4,
+                                $operand : 1,
+                                f : 0b0100_0000,
+                                pc : 1
+                            }
+                        }
+                    }
+                }
+
+                #[test]
+                fn [<dec_ $operand _sets_zero_flag>]() {
+                    assert_instruction! {
+                        opcode : $opcode
+                        dec : [ $operand ]
+                        setup : {
+                            reg_set : {
+                                $operand : 1
+                            }
+                        }
+                        assert : {
+                            reg_eq : {
+                                m : 1,
+                                t : 4,
+                                $operand : 0,
+                                f : 0b1100_0000,
+                                pc : 1
+                            }
+                        }
+                    }
+                }
+
+                #[test]
+                fn [<dec_ $operand _sets_half_carry_flag>]() {
+                    assert_instruction! {
+                        opcode : $opcode
+                        dec : [ $operand ]
+                        setup : {
+                            reg_set : {
+                                $operand : 0b0001_0000
+                            }
+                        }
+                        assert : {
+                            reg_eq : {
+                                m : 1,
+                                t : 4,
+                                $operand : 0b0000_1111,
+                                f : 0b0110_0000,
+                                pc : 1
+                            }
+                        }
+                    }
+                }
+
+                #[test]
+                fn [<dec_ $operand _sets_neg_flag>]() {
+                    assert_instruction! {
+                        opcode : $opcode
+                        dec : [ $operand ]
+                        setup : {
+                            reg_set : {
+                                $operand : 2,
+                                f : 0b1110_0000
+                            }
+                        }
+                        assert : {
+                            reg_eq : {
+                                m : 1,
+                                t : 4,
+                                $operand : 1,
+                                f : 0b0100_0000,
                                 pc : 1
                             }
                         }
@@ -780,94 +876,8 @@ mod tests {
 assert_inc_x8!(b, 0x04);
 assert_inc_x8!(c, 0x0C);
 
-    #[test]
-    fn dec_b() {
-        assert_instruction! {
-            opcode : 0x05
-            dec : [ b ]
-            setup : {
-                reg_set : {
-                    b : 2
-                }
-            }
-            assert : {
-                reg_eq : {
-                    m : 1,
-                    t : 4,
-                    b : 1,
-                    f : 0b0100_0000,
-                    pc : 1
-                }
-            }
-        }
-    }
-
-    #[test]
-    fn dec_b_sets_zero_flag() {
-        assert_instruction! {
-            opcode : 0x05
-            dec : [ b ]
-            setup : {
-                reg_set : {
-                    b : 1
-                }
-            }
-            assert : {
-                reg_eq : {
-                    m : 1,
-                    t : 4,
-                    b : 0,
-                    f : 0b1100_0000,
-                    pc : 1
-                }
-            }
-        }
-    }
-
-    #[test]
-    fn dec_b_sets_half_carry_flag() {
-        assert_instruction! {
-            opcode : 0x05
-            dec : [ b ]
-            setup : {
-                reg_set : {
-                    b : 0b0001_0000
-                }
-            }
-            assert : {
-                reg_eq : {
-                    m : 1,
-                    t : 4,
-                    b : 0b0000_1111,
-                    f : 0b0110_0000,
-                    pc : 1
-                }
-            }
-        }
-    }
-
-    #[test]
-    fn dec_b_sets_neg_flag() {
-        assert_instruction! {
-            opcode : 0x05
-            dec : [ b ]
-            setup : {
-                reg_set : {
-                    b : 2,
-                    f : 0b1110_0000
-                }
-            }
-            assert : {
-                reg_eq : {
-                    m : 1,
-                    t : 4,
-                    b : 1,
-                    f : 0b0100_0000,
-                    pc : 1
-                }
-            }
-        }
-    }
+assert_dec_x8!(b, 0x05);
+assert_dec_x8!(c, 0x0D);
 
     #[test]
     fn ld_b_u8() {
