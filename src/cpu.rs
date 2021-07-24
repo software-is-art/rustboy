@@ -325,6 +325,7 @@ impl Z80<Decode> {
             0x0B => dec!(b, c),
             0x0C => inc!(c),
             0x0D => dec!(c),
+            0x0E => ld!([c], [u8]),
             0x17 => rla!(),
             _ => panic!("Uh, oh")
         };
@@ -647,6 +648,33 @@ mod tests {
         };
     }
 
+    macro_rules! assert_ld_u8 {
+        ($operand:tt, $opcode:expr) => {
+            paste! {
+                #[test]
+                fn [<ld_ $operand _u8>]() {
+                    assert_instruction! {
+                        opcode : $opcode
+                        ld : [ [$operand], [u8] ]
+                        setup : {
+                            mem_set : {
+                                1 : 3
+                            }
+                        }
+                        assert : {
+                            reg_eq : {
+                                m : 2,
+                                t : 8,
+                                $operand : 3,
+                                pc : 2
+                            }
+                        }
+                    }
+                }
+            }
+        };
+    }
+
     fn cpu_decode(opcode: u8) -> Z80<Execute> {
         Z80 {
             s: Decode { opcode },
@@ -879,26 +907,8 @@ assert_inc_x8!(c, 0x0C);
 assert_dec_x8!(b, 0x05);
 assert_dec_x8!(c, 0x0D);
 
-    #[test]
-    fn ld_b_u8() {
-        assert_instruction! {
-            opcode : 0x06
-            ld : [ [b], [u8] ]
-            setup : {
-                mem_set : {
-                    1 : 3
-                }
-            }
-            assert : {
-                reg_eq : {
-                    m : 2,
-                    t : 8,
-                    b : 3,
-                    pc : 2
-                }
-            }
-        }
-    }
+assert_ld_u8!(b, 0x06);
+assert_ld_u8!(c, 0x0E);
 
     #[test]
     fn rlca() {
