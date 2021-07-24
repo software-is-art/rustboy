@@ -161,6 +161,12 @@ macro_rules! inc {
 }
 
 macro_rules! dec {
+    ($high:tt, $low:tt) => {
+        |cpu: &mut Z80<Execute>| {
+            let val = read!(cpu, $high, $low);
+            write!(cpu, $high, $low, val.wrapping_sub(1));
+        }
+    };
     ($target:tt) => {
         |cpu: &mut Z80<Execute>| {
             let current = read!(cpu, $target);
@@ -315,6 +321,7 @@ impl Z80<Decode> {
             0x08 => ld!([(u16)], [sp]),
             0x09 => add!([h, l], [b, c]),
             0x0A => ld!([a], [(b, c)]),
+            0x0B => dec!(b, c),
             0x17 => rla!(),
             _ => panic!("Uh, oh")
         };
@@ -1013,6 +1020,29 @@ mod tests {
                     m : 2,
                     t : 8,
                     a : 10,
+                    pc : 1
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn dec_bc() {
+        assert_instruction! {
+            opcode : 0x0B
+            dec : [ b, c ]
+            setup : {
+                reg_set : {
+                    b : 0,
+                    c : 0,
+                    f : 0b1111_0000
+                }
+            }
+            assert : {
+                reg_eq : {
+                    b : 0xFF,
+                    c : 0xFF,
+                    f : 0b1111_0000,
                     pc : 1
                 }
             }
