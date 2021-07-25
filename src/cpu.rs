@@ -347,6 +347,7 @@ impl Z80<Decode> {
             0x0E => ld!([c], [u8]),
             0x0F => rrca!(),
             0x10 => stop!(),
+            0x11 => ld!([d, e], [u16]),
             0x17 => rla!(),
             _ => panic!("Uh, oh")
         };
@@ -696,6 +697,36 @@ mod tests {
         };
     }
 
+    macro_rules! assert_ld_u16_x16 {
+        ($high:tt, $low:tt, $opcode:expr) => {
+            paste! {
+                #[test]
+                fn [<ld_ $high _ $low _u16>]() {
+                    assert_instruction! {
+                        opcode : $opcode
+                        ld : [ [$high, $low], [u16] ]
+                        setup : {
+                            mem_set : {
+                                1 : 2,
+                                2 : 1
+                            }
+                        }
+                        assert : {
+                            reg_eq : {
+                                $high : 1,
+                                $low : 2,
+                                m : 3,
+                                t : 12,
+                                f : 0,
+                                pc : 3
+                            }
+                        }
+                    }
+                }
+            }
+        };
+    }
+
     fn cpu_decode(opcode: u8) -> Z80<Execute> {
         Z80 {
             s: Decode { opcode },
@@ -845,29 +876,8 @@ mod tests {
         )
     }
 
-    #[test]
-    fn ld_bc_u16() {
-        assert_instruction! {
-            opcode : 0x01
-            ld : [ [b, c], [u16] ]
-            setup : {
-                mem_set : {
-                    1 : 2,
-                    2 : 1
-                }
-            }
-            assert : {
-                reg_eq : {
-                    b : 1,
-                    c : 2,
-                    m : 3,
-                    t : 12,
-                    f : 0,
-                    pc : 3
-                }
-            }
-        }
-    }
+assert_ld_u16_x16!(b, c, 0x01);
+assert_ld_u16_x16!(d, e, 0x11);
 
     #[test]
     fn ld_bc_a_indirect() {
