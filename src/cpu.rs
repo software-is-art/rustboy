@@ -348,6 +348,7 @@ impl Z80<Decode> {
             0x0F => rrca!(),
             0x10 => stop!(),
             0x11 => ld!([d, e], [u16]),
+            0x12 => ld!([(d, e)], [a]),
             0x17 => rla!(),
             _ => panic!("Uh, oh")
         };
@@ -701,7 +702,7 @@ mod tests {
         ($high:tt, $low:tt, $opcode:expr) => {
             paste! {
                 #[test]
-                fn [<ld_ $high _ $low _u16>]() {
+                fn [<ld_ $high $low _u16>]() {
                     assert_instruction! {
                         opcode : $opcode
                         ld : [ [$high, $low], [u16] ]
@@ -719,6 +720,41 @@ mod tests {
                                 t : 12,
                                 f : 0,
                                 pc : 3
+                            }
+                        }
+                    }
+                }
+            }
+        };
+    }
+
+    macro_rules! assert_ld_indirect_x8 {
+        ([$high:tt, $low:tt], [$src:tt], $opcode:expr) => {
+            paste! {
+                #[test]
+                fn [<ld_ $high $low _ $src _indirect>]() {
+                    assert_instruction! {
+                        opcode : $opcode
+                        ld : [ [($high, $low)], [$src] ]
+                        setup : {
+                            reg_set : {
+                                $src : 22,
+                                $high: 1,
+                                $low: 1
+                            }
+                        }
+                        assert : {
+                            reg_eq : {
+                                $src : 22,
+                                $high : 1,
+                                $low : 1,
+                                m : 2,
+                                t : 8,
+                                f : 0,
+                                pc : 1
+                            },
+                            mem_eq : {
+                                (1, 1) : 22
                             }
                         }
                     }
@@ -879,34 +915,9 @@ mod tests {
 assert_ld_u16_x16!(b, c, 0x01);
 assert_ld_u16_x16!(d, e, 0x11);
 
-    #[test]
-    fn ld_bc_a_indirect() {
-        assert_instruction! {
-            opcode : 0x02
-            ld : [ [(b, c)], [a] ]
-            setup : {
-                reg_set : {
-                    a : 22,
-                    b: 1,
-                    c: 1
-                }
-            }
-            assert : {
-                reg_eq : {
-                    a : 22,
-                    b : 1,
-                    c : 1,
-                    m : 2,
-                    t : 8,
-                    f : 0,
-                    pc : 1
-                },
-                mem_eq : {
-                    (1, 1) : 22
-                }
-            }
-        }
-    }
+assert_ld_indirect_x8!([b, c], [a], 0x02);
+assert_ld_indirect_x8!([d, e], [a], 0x12);
+
 
     #[test]
     fn inc_bc() {
