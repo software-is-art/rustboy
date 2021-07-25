@@ -204,6 +204,17 @@ macro_rules! rla {
     }
 }
 
+macro_rules! rrca {
+    () => {
+        |cpu: &mut Z80<Execute>| {
+            let val = read!(cpu, a);
+            let c = (val & 0b0000_0001) << 7;
+            cpu.registers.f = c >> 3;
+            write!(cpu, a, (val >> 1) | c);
+        }
+    }
+}
+
 macro_rules! add {
     ([$($target:tt)+], [$($source:tt)+]) => {
         |cpu: &mut Z80<Execute>| {
@@ -326,6 +337,7 @@ impl Z80<Decode> {
             0x0C => inc!(c),
             0x0D => dec!(c),
             0x0E => ld!([c], [u8]),
+            0x0F => rrca!(),
             0x17 => rla!(),
             _ => panic!("Uh, oh")
         };
@@ -917,7 +929,7 @@ assert_ld_u8!(c, 0x0E);
             rlca : [ ]
             setup : {
                 reg_set : {
-                    a : 0x95,
+                    a : 0b1001_0101,
                     f : 0b0001_0000
                 }
             }
@@ -925,7 +937,7 @@ assert_ld_u8!(c, 0x0E);
                 reg_eq : {
                     m : 1,
                     t : 4,
-                    a : 0x2B,
+                    a : 0b0010_1011,
                     f : 0b0001_0000,
                     pc : 1
                 }
@@ -1078,6 +1090,29 @@ assert_ld_u8!(c, 0x0E);
                     b : 0xFF,
                     c : 0xFF,
                     f : 0b1111_0000,
+                    pc : 1
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn rrca() {
+        assert_instruction! {
+            opcode : 0x0F
+            rrca : [ ]
+            setup : {
+                reg_set : {
+                    a : 0b1001_0101,
+                    f : 0b0000_0000
+                }
+            }
+            assert : {
+                reg_eq : {
+                    m : 1,
+                    t : 4,
+                    a : 0b1100_1010,
+                    f : 0b0001_0000,
                     pc : 1
                 }
             }
