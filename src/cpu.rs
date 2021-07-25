@@ -349,6 +349,7 @@ impl Z80<Decode> {
             0x10 => stop!(),
             0x11 => ld!([d, e], [u16]),
             0x12 => ld!([(d, e)], [a]),
+            0x13 => inc!(d, e),
             0x17 => rla!(),
             _ => panic!("Uh, oh")
         };
@@ -763,6 +764,36 @@ mod tests {
         };
     }
 
+    macro_rules! assert_inc_x16 {
+        ($high:tt, $low:tt, $opcode:expr) => {
+            paste! {
+                #[test]
+                fn [<inc_ $high $low>]() {
+                    assert_instruction! {
+                        opcode : $opcode
+                        inc : [ $high, $low ]
+                        setup : {
+                            reg_set : {
+                                $high : 1,
+                                $low : 2
+                            }
+                        }
+                        assert : {
+                            reg_eq : {
+                                $high : 1,
+                                $low : 3,
+                                m : 2,
+                                t : 8,
+                                f : 0,
+                                pc : 1
+                            }
+                        }
+                    }
+                }
+            }
+        };
+    }
+
     fn cpu_decode(opcode: u8) -> Z80<Execute> {
         Z80 {
             s: Decode { opcode },
@@ -918,30 +949,8 @@ assert_ld_u16_x16!(d, e, 0x11);
 assert_ld_indirect_x8!([b, c], [a], 0x02);
 assert_ld_indirect_x8!([d, e], [a], 0x12);
 
-
-    #[test]
-    fn inc_bc() {
-        assert_instruction! {
-            opcode : 0x03
-            inc : [ b, c ]
-            setup : {
-                reg_set : {
-                    b : 1,
-                    c : 2
-                }
-            }
-            assert : {
-                reg_eq : {
-                    b : 1,
-                    c : 3,
-                    m : 2,
-                    t : 8,
-                    f : 0,
-                    pc : 1
-                }
-            }
-        }
-    }
+assert_inc_x16!(b, c, 0x03);
+assert_inc_x16!(d, e, 0x13);
 
 assert_inc_x8!(b, 0x04);
 assert_inc_x8!(c, 0x0C);
