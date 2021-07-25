@@ -231,6 +231,14 @@ macro_rules! add {
     }
 }
 
+macro_rules! stop {
+    () => {
+        |cpu: &mut Z80<Execute>| {
+            cpu.registers.pc += 1;
+        }
+    }
+}
+
 #[derive(Debug, PartialEq)]
 struct Z80<S: State> {
     registers: Registers,
@@ -338,6 +346,7 @@ impl Z80<Decode> {
             0x0D => dec!(c),
             0x0E => ld!([c], [u8]),
             0x0F => rrca!(),
+            0x10 => stop!(),
             0x17 => rla!(),
             _ => panic!("Uh, oh")
         };
@@ -1114,6 +1123,29 @@ assert_ld_u8!(c, 0x0E);
                     a : 0b1100_1010,
                     f : 0b0001_0000,
                     pc : 1
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn stop() {
+        assert_instruction! {
+            opcode : 0x10
+            stop : [ ]
+            setup : {
+                mem_set : {
+                    (0, 1) : 0
+                }
+            }
+            assert : {
+                reg_eq : {
+                    m : 1,
+                    t : 4,
+                    pc : 2
+                },
+                mem_eq : {
+                    (0, 1) : 0
                 }
             }
         }
