@@ -239,6 +239,16 @@ macro_rules! stop {
     }
 }
 
+macro_rules! jr {
+    (i8) => {
+        |cpu: &mut Z80<Execute>| {
+            let offset = cpu.mmu.read_u8(cpu.registers.pc) as u16;
+            cpu.registers.pc += 1u16 + offset;
+            m_time!(cpu, 2);
+        }
+    }
+}
+
 #[derive(Debug, PartialEq)]
 struct Z80<S: State> {
     registers: Registers,
@@ -354,6 +364,7 @@ impl Z80<Decode> {
             0x15 => dec!(d),
             0x16 => ld!([d], [u8]),
             0x17 => rla!(),
+            0x18 => jr!(i8),
             _ => panic!("Uh, oh")
         };
 
@@ -1204,6 +1215,26 @@ assert_ld_u8!(d, 0x16);
                     a : 0x0A,
                     f : 0b0001_0000,
                     pc : 1
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn jr_i8() {
+        assert_instruction! {
+            opcode : 0x18
+            jr : [ i8 ]
+            setup : {
+                mem_set : {
+                    1 : 25
+                }
+            }
+            assert : {
+                reg_eq : {
+                    m : 3,
+                    t : 12,
+                    pc : 27
                 }
             }
         }
