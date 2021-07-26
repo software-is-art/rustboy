@@ -352,6 +352,7 @@ impl Z80<Decode> {
             0x13 => inc!(d, e),
             0x14 => inc!(d),
             0x15 => dec!(d),
+            0x16 => ld!([d], [u8]),
             0x17 => rla!(),
             _ => panic!("Uh, oh")
         };
@@ -964,6 +965,7 @@ assert_dec_x8!(d, 0x15);
 
 assert_ld_u8!(b, 0x06);
 assert_ld_u8!(c, 0x0E);
+assert_ld_u8!(d, 0x16);
 
     #[test]
     fn rlca() {
