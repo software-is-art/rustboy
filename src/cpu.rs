@@ -365,6 +365,7 @@ impl Z80<Decode> {
             0x16 => ld!([d], [u8]),
             0x17 => rla!(),
             0x18 => jr!(i8),
+            0x19 => add!([h, l], [d, e]),
             _ => panic!("Uh, oh")
         };
 
@@ -808,6 +809,87 @@ mod tests {
         };
     }
 
+    macro_rules! assert_add_x16 {
+        ([$tgt_high:tt, $tgt_low:tt], [$src_high:tt, $src_low:tt], $opcode:expr) => {
+            paste! {
+                #[test]
+                fn [<add_ $tgt_high $tgt_low _ $src_high $src_low>]() {
+                    assert_instruction! {
+                        opcode : $opcode
+                        add : [ [$tgt_high, $tgt_low], [$src_high, $src_low] ]
+                        setup : {
+                            reg_set : {
+                                $src_high : 0b0000_0001,
+                                $src_low : 0b0000_0010,
+                                $tgt_high : 0b0000_0100,
+                                $tgt_low : 0b0000_1000,
+                                f : 0b1100_0000
+                            }
+                        }
+                        assert : {
+                            reg_eq : {
+                                m : 2,
+                                t : 8,
+                                $src_high : 0b0000_0001,
+                                $src_low : 0b0000_0010,
+                                $tgt_high : 0b0000_0101,
+                                $tgt_low : 0b0000_1010,
+                                f : 0b1000_0000,
+                                pc : 1
+                            }
+                        }
+                    }
+                }
+
+                #[test]
+                fn [<add_ $tgt_high $tgt_low _ $src_high $src_low _half_carry>]() {
+                    assert_instruction! {
+                        opcode : $opcode
+                        add : [ [$tgt_high, $tgt_low], [$src_high, $src_low] ]
+                        setup : {
+                            reg_set : {
+                                $src_high : 0b0000_1000,
+                                $tgt_high : 0b0000_1000
+                            }
+                        }
+                        assert : {
+                            reg_eq : {
+                                m : 2,
+                                t : 8,
+                                $tgt_high : 0b0001_0000,
+                                f : 0b0010_0000,
+                                pc : 1
+                            }
+                        }
+                    }
+                }
+
+                #[test]
+                fn [<add_ $tgt_high $tgt_low _ $src_high $src_low _carry>]() {
+                    assert_instruction! {
+                        opcode : $opcode
+                        add : [ [$tgt_high, $tgt_low], [$src_high, $src_low] ]
+                        setup : {
+                            reg_set : {
+                                $src_high : 0b1000_1010,
+                                $tgt_high : 0b1000_0101
+                            }
+                        }
+                        assert : {
+                            reg_eq : {
+                                m : 2,
+                                t : 8,
+                                $tgt_high : 0b0000_1111,
+                                f : 0b0001_0000,
+                                pc : 1
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     fn cpu_decode(opcode: u8) -> Z80<Execute> {
         Z80 {
             s: Decode { opcode },
@@ -978,6 +1060,9 @@ assert_ld_u8!(b, 0x06);
 assert_ld_u8!(c, 0x0E);
 assert_ld_u8!(d, 0x16);
 
+assert_add_x16!([h, l], [b, c], 0x09);
+assert_add_x16!([h, l], [d, e], 0x19);
+
     #[test]
     fn rlca() {
         assert_instruction! {
@@ -1024,81 +1109,6 @@ assert_ld_u8!(d, 0x16);
                 mem_eq : {
                     (0b0010_0010, 0b0001_0001) : 0b0100_0100,
                     (0b0010_0010, 0b0001_0010) : 0b1000_1000
-                }
-            }
-        }
-    }
-
-    #[test]
-    fn add_hl_bc() {
-        assert_instruction! {
-            opcode : 0x09
-            add : [ [h, l], [b, c] ]
-            setup : {
-                reg_set : {
-                    b : 0b0000_0001,
-                    c : 0b0000_0010,
-                    h : 0b0000_0100,
-                    l : 0b0000_1000,
-                    f : 0b1100_0000
-                }
-            }
-            assert : {
-                reg_eq : {
-                    m : 2,
-                    t : 8,
-                    b : 0b0000_0001,
-                    c : 0b0000_0010,
-                    h : 0b0000_0101,
-                    l : 0b0000_1010,
-                    f : 0b1000_0000,
-                    pc : 1
-                }
-            }
-        }
-    }
-
-    #[test]
-    fn add_hl_bc_half_carry() {
-        assert_instruction! {
-            opcode : 0x09
-            add : [ [h, l], [b, c] ]
-            setup : {
-                reg_set : {
-                    b : 0b0000_1000,
-                    h : 0b0000_1000
-                }
-            }
-            assert : {
-                reg_eq : {
-                    m : 2,
-                    t : 8,
-                    h : 0b0001_0000,
-                    f : 0b0010_0000,
-                    pc : 1
-                }
-            }
-        }
-    }
-
-    #[test]
-    fn add_hl_bc_carry() {
-        assert_instruction! {
-            opcode : 0x09
-            add : [ [h, l], [b, c] ]
-            setup : {
-                reg_set : {
-                    b : 0b1000_1010,
-                    h : 0b1000_0101
-                }
-            }
-            assert : {
-                reg_eq : {
-                    m : 2,
-                    t : 8,
-                    h : 0b0000_1111,
-                    f : 0b0001_0000,
-                    pc : 1
                 }
             }
         }
