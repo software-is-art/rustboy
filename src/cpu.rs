@@ -367,6 +367,7 @@ impl Z80<Decode> {
             0x18 => jr!(i8),
             0x19 => add!([h, l], [d, e]),
             0x1A => ld!([a], [(d, e)]),
+            0x1B => dec!(d, e),
             _ => panic!("Uh, oh")
         };
 
@@ -922,6 +923,35 @@ mod tests {
         }
     }
 
+    macro_rules! assert_dec_x16 {
+        ([$src_high:tt, $src_low:tt], $opcode:expr) => {
+            paste! {
+                #[test]
+                fn [<dec_ $src_high $src_low>]() {
+                    assert_instruction! {
+                        opcode : $opcode
+                        dec : [ $src_high, $src_low ]
+                        setup : {
+                            reg_set : {
+                                $src_high : 0,
+                                $src_low : 0,
+                                f : 0b1111_0000
+                            }
+                        }
+                        assert : {
+                            reg_eq : {
+                                $src_high : 0xFF,
+                                $src_low : 0xFF,
+                                f : 0b1111_0000,
+                                pc : 1
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     fn cpu_decode(opcode: u8) -> Z80<Execute> {
         Z80 {
             s: Decode { opcode },
@@ -1098,6 +1128,9 @@ assert_add_x16!([h, l], [d, e], 0x19);
 assert_ld_indirect_src_x8!(a, [b, c], 0x0A);
 assert_ld_indirect_src_x8!(a, [d, e], 0x1A);
 
+assert_dec_x16!([b, c], 0x0B);
+assert_dec_x16!([d, e], 0x1B);
+
     #[test]
     fn rlca() {
         assert_instruction! {
@@ -1144,29 +1177,6 @@ assert_ld_indirect_src_x8!(a, [d, e], 0x1A);
                 mem_eq : {
                     (0b0010_0010, 0b0001_0001) : 0b0100_0100,
                     (0b0010_0010, 0b0001_0010) : 0b1000_1000
-                }
-            }
-        }
-    }
-
-    #[test]
-    fn dec_bc() {
-        assert_instruction! {
-            opcode : 0x0B
-            dec : [ b, c ]
-            setup : {
-                reg_set : {
-                    b : 0,
-                    c : 0,
-                    f : 0b1111_0000
-                }
-            }
-            assert : {
-                reg_eq : {
-                    b : 0xFF,
-                    c : 0xFF,
-                    f : 0b1111_0000,
-                    pc : 1
                 }
             }
         }
