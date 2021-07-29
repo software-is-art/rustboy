@@ -370,6 +370,7 @@ impl Z80<Decode> {
             0x1B => dec!(d, e),
             0x1C => inc!(e),
             0x1D => dec!(e),
+            0x1E => ld!([e], [u8]),
             _ => panic!("Uh, oh")
         };
 
@@ -1125,6 +1126,7 @@ assert_dec_x8!(e, 0x1D);
 assert_ld_u8!(b, 0x06);
 assert_ld_u8!(c, 0x0E);
 assert_ld_u8!(d, 0x16);
+assert_ld_u8!(e, 0x1E);
 
 assert_add_x16!([h, l], [b, c], 0x09);
 assert_add_x16!([h, l], [d, e], 0x19);
