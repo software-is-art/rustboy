@@ -366,6 +366,7 @@ impl Z80<Decode> {
             0x17 => rla!(),
             0x18 => jr!(i8),
             0x19 => add!([h, l], [d, e]),
+            0x1A => ld!([a], [(d, e)]),
             _ => panic!("Uh, oh")
         };
 
@@ -744,7 +745,7 @@ mod tests {
         };
     }
 
-    macro_rules! assert_ld_indirect_x8 {
+    macro_rules! assert_ld_indirect_target_x8 {
         ([$high:tt, $low:tt], [$src:tt], $opcode:expr) => {
             paste! {
                 #[test]
@@ -881,6 +882,37 @@ mod tests {
                                 t : 8,
                                 $tgt_high : 0b0000_1111,
                                 f : 0b0001_0000,
+                                pc : 1
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    macro_rules! assert_ld_indirect_src_x8 {
+        ($target:tt, [$src_high:tt, $src_low:tt], $opcode:expr) => {
+            paste! {
+                #[test]
+                fn [<ld_ $target _ $src_high $src_low _indirect>]() {
+                    assert_instruction! {
+                        opcode : $opcode
+                        ld : [[$target], [($src_high, $src_low)]]
+                        setup : {
+                            reg_set : {
+                                $src_high : 4,
+                                $src_low : 5
+                            },
+                            mem_set : {
+                                (4, 5) : 10
+                            }
+                        }
+                        assert : {
+                            reg_eq : {
+                                m : 2,
+                                t : 8,
+                                $target : 10,
                                 pc : 1
                             }
                         }
@@ -1042,8 +1074,8 @@ mod tests {
 assert_ld_u16_x16!(b, c, 0x01);
 assert_ld_u16_x16!(d, e, 0x11);
 
-assert_ld_indirect_x8!([b, c], [a], 0x02);
-assert_ld_indirect_x8!([d, e], [a], 0x12);
+assert_ld_indirect_target_x8!([b, c], [a], 0x02);
+assert_ld_indirect_target_x8!([d, e], [a], 0x12);
 
 assert_inc_x16!(b, c, 0x03);
 assert_inc_x16!(d, e, 0x13);
@@ -1062,6 +1094,9 @@ assert_ld_u8!(d, 0x16);
 
 assert_add_x16!([h, l], [b, c], 0x09);
 assert_add_x16!([h, l], [d, e], 0x19);
+
+assert_ld_indirect_src_x8!(a, [b, c], 0x0A);
+assert_ld_indirect_src_x8!(a, [d, e], 0x1A);
 
     #[test]
     fn rlca() {
@@ -1109,31 +1144,6 @@ assert_add_x16!([h, l], [d, e], 0x19);
                 mem_eq : {
                     (0b0010_0010, 0b0001_0001) : 0b0100_0100,
                     (0b0010_0010, 0b0001_0010) : 0b1000_1000
-                }
-            }
-        }
-    }
-
-    #[test]
-    fn ld_a_bc_indirect() {
-        assert_instruction! {
-            opcode : 0x0A
-            ld : [[a], [(b, c)]]
-            setup : {
-                reg_set : {
-                    b : 4,
-                    c : 5
-                },
-                mem_set : {
-                    (4, 5) : 10
-                }
-            }
-            assert : {
-                reg_eq : {
-                    m : 2,
-                    t : 8,
-                    a : 10,
-                    pc : 1
                 }
             }
         }
