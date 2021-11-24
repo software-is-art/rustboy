@@ -53,7 +53,7 @@ macro_rules! mem_set {
     }
 }
 
-macro_rules! flag_mask {
+macro_rules! flags {
     (z) => {
         0b1000_0000
     };
@@ -65,6 +65,11 @@ macro_rules! flag_mask {
     };
     (c) => {
         0b0001_0000
+    };
+    ($($flag:tt)+) => {
+        $(
+            flags!($flag) |
+        )+ 0x0000_0000;
     };
 }
 
@@ -279,10 +284,7 @@ macro_rules! jr {
             let offset = i16::from(cpu.mmu.read_u8(cpu.registers.pc) as i8);
             cpu.registers.pc += 1u16;
             m_time!(cpu, 1);
-            let mut mask: u8 = 0b0000_0000;
-            $(
-                mask |= flag_mask!($flags);
-            )+
+            let mut mask: u8 = flags!($($flags)+);
             if ((cpu.registers.f & mask) == mask) {
                 m_time!(cpu, 1);
                 cpu.registers.pc = (offset + cpu.registers.pc as i16) as u16;
@@ -1075,11 +1077,12 @@ mod tests {
     }
 
     #[test]
-    fn flag_mask_macro() {
-        assert_eq!(0b1000_0000, flag_mask!(z));
-        assert_eq!(0b0100_0000, flag_mask!(n));
-        assert_eq!(0b0010_0000, flag_mask!(h));
-        assert_eq!(0b0001_0000, flag_mask!(c));
+    fn flags_macro() {
+        assert_eq!(0b1000_0000, flags!(z));
+        assert_eq!(0b0100_0000, flags!(n));
+        assert_eq!(0b0010_0000, flags!(h));
+        assert_eq!(0b0001_0000, flags!(c));
+        assert_eq!(flags!(z) | flags!(n) | flags!(h) | flags!(c), flags!(z n h c));
     }
 
     #[test]
@@ -1381,7 +1384,7 @@ assert_dec_x16!([d, e], 0x1B);
                     1 : 25
                 },
                 reg_set : {
-                    f : flag_mask!(n) | flag_mask!(z)
+                    f : flags!(n) | flags!(z)
                 }
             }
             assert : {
@@ -1404,7 +1407,7 @@ assert_dec_x16!([d, e], 0x1B);
                     1 : (-25i8) as u8
                 },
                 reg_set : {
-                    f : flag_mask!(n) | flag_mask!(z)
+                    f : flags!(n z)
                 }
             }
             assert : {
@@ -1427,7 +1430,7 @@ assert_dec_x16!([d, e], 0x1B);
                     1 : 25
                 },
                 reg_set : {
-                    f : flag_mask!(n)
+                    f : flags!(n)
                 }
             }
             assert : {
@@ -1450,7 +1453,7 @@ assert_dec_x16!([d, e], 0x1B);
                     1 : 25
                 },
                 reg_set : {
-                    f : flag_mask!(z)
+                    f : flags!(z)
                 }
             }
             assert : {
