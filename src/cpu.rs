@@ -119,6 +119,12 @@ macro_rules! write {
             m_time!($cpu, 2);
         }
     };
+    ($cpu:expr, ($high:tt, $low:tt)+, $value:expr) => {
+        {
+            $cpu.mmu.write_u8(read!($cpu, $high, $low) + 1, $value);
+            m_time!($cpu, 1);
+        }
+    };
     ($cpu:expr, ($high:tt, $low:tt), $value:expr) => {
         {
             $cpu.mmu.write_u8(read!($cpu, $high, $low), $value);
@@ -418,6 +424,7 @@ impl Z80<Decode> {
             0x1F => rra!(),
             0x20 => jr!([n z], [i8]),
             0x21 => ld!([h, l], [u16]),
+            0x22 => ld!([(h, l)+], [a]),
             _ => panic!("Uh, oh")
         };
 
@@ -831,6 +838,44 @@ mod tests {
         };
     }
 
+    macro_rules! assert_ld_indirect_target_x8_with_offset {
+        ([$high:tt, $low:tt]+, [$src:tt], $opcode:expr) => {
+            assert_ld_indirect_target_x8_with_offset!([$high, $low], +, 1, [$src], $opcode);
+        };
+        ([$high:tt, $low:tt], $offset_token:tt, $offset:expr, [$src:tt], $opcode:expr) => {
+            paste! {
+                #[test]
+                fn [<ld_ $high $low _ $src _indirect>]() {
+                    assert_instruction! {
+                        opcode : $opcode
+                        ld : [ [($high, $low)$offset_token], [$src] ]
+                        setup : {
+                            reg_set : {
+                                $src : 22,
+                                $high: 1,
+                                $low: 1
+                            }
+                        }
+                        assert : {
+                            reg_eq : {
+                                $src : 22,
+                                $high : 1,
+                                $low : 1,
+                                m : 2,
+                                t : 8,
+                                f : 0,
+                                pc : 1
+                            },
+                            mem_eq : {
+                                (1, 1 + $offset) : 22
+                            }
+                        }
+                    }
+                }
+            }
+        };
+    }
+
     macro_rules! assert_inc_x16 {
         ($high:tt, $low:tt, $opcode:expr) => {
             paste! {
@@ -1166,6 +1211,8 @@ assert_ld_u16_x16!(h, l, 0x21);
 
 assert_ld_indirect_target_x8!([b, c], [a], 0x02);
 assert_ld_indirect_target_x8!([d, e], [a], 0x12);
+
+assert_ld_indirect_target_x8_with_offset!([h, l]+, [a], 0x22);
 
 
 assert_inc_x16!(b, c, 0x03);
