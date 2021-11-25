@@ -417,6 +417,7 @@ impl Z80<Decode> {
             0x1E => ld!([e], [u8]),
             0x1F => rra!(),
             0x20 => jr!([n z], [i8]),
+            0x21 => ld!([h, l], [u16]),
             _ => panic!("Uh, oh")
         };
 
@@ -1161,9 +1162,11 @@ mod tests {
 
 assert_ld_u16_x16!(b, c, 0x01);
 assert_ld_u16_x16!(d, e, 0x11);
+assert_ld_u16_x16!(h, l, 0x21);
 
 assert_ld_indirect_target_x8!([b, c], [a], 0x02);
 assert_ld_indirect_target_x8!([d, e], [a], 0x12);
+
 
 assert_inc_x16!(b, c, 0x03);
 assert_inc_x16!(d, e, 0x13);
