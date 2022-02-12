@@ -425,6 +425,7 @@ impl Z80<Decode> {
             0x20 => jr!([n z], [i8]),
             0x21 => ld!([h, l], [u16]),
             0x22 => ld!([(h, l)+], [a]),
+            0x23 => inc!(h, l),
             _ => panic!("Uh, oh")
         };
 
@@ -1217,6 +1218,7 @@ assert_ld_indirect_target_x8_with_offset!([h, l]+, [a], 0x22);
 
 assert_inc_x16!(b, c, 0x03);
 assert_inc_x16!(d, e, 0x13);
+assert_inc_x16!(h, l, 0x23);
 
 assert_inc_x8!(b, 0x04);
 assert_inc_x8!(c, 0x0C);
