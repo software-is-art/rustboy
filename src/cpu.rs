@@ -66,6 +66,12 @@ macro_rules! flags {
     (c) => {
         0b0001_0000
     };
+    ($cpu:expr, $($flag:tt)+) => {
+        {
+            let mask = flags!($($flag)+);
+            ($cpu.registers.f & mask) == mask
+        }
+    };
     ($($flag:tt)+) => {
         $(
             flags!($flag) |
@@ -73,6 +79,14 @@ macro_rules! flags {
     };
 }
 
+macro_rules! set_flags {
+    ($cpu:expr, $($flag:tt)+) => {
+        {
+            let mask = flags!($($flag)+);
+            $cpu.registers.f |= mask;
+        }
+    };
+}
 
 macro_rules! read {
     ($cpu:expr, u16) => {
@@ -294,6 +308,34 @@ macro_rules! jr {
             if ((cpu.registers.f & mask) == mask) {
                 m_time!(cpu, 1);
                 cpu.registers.pc = (offset + cpu.registers.pc as i16) as u16;
+            }
+        }
+    };
+}
+
+macro_rules! daa {
+    () => {
+        |cpu: &mut Z80<Execute>| {
+            let a = &mut cpu.registers.a;
+            let subtraction = flags!(cpu, n);
+            let carry = flags!(cpu, c);
+            let half_carry = flags!(cpu, h);
+            if (subtraction) {
+                if (carry) {
+                    *a -= 0x60;
+                    set_flags!(cpu, c);
+                }
+                if (half_carry) {
+                    *a -= 0x6;
+                }
+            } else {
+                if (carry || *a > 0x99) {
+                    *a += 0x60;
+                    set_flags!(cpu, c);
+                }
+                if (half_carry || (*a & 0x0F) > 0x09) {
+                    *a += 0x6;
+                }
             }
         }
     };
@@ -1133,6 +1175,11 @@ mod tests {
         assert_eq!(0b0010_0000, flags!(h));
         assert_eq!(0b0001_0000, flags!(c));
         assert_eq!(flags!(z) | flags!(n) | flags!(h) | flags!(c), flags!(z n h c));
+        let mut cpu = cpu_execute();
+        cpu.registers.f = flags!(z c);
+        assert_eq!(flags!(cpu, z c), true);
+        assert_eq!(flags!(cpu, z c h), false);
+        assert_eq!(flags!(cpu, z), true);
     }
 
     #[test]
@@ -1190,6 +1237,15 @@ mod tests {
         reg_set!(cpu, b=0, c=0, h=upper, l=lower);
         ld!([b, c], [h, l])(&mut cpu);
         reg_eq!(cpu, b=upper, c=lower, h=upper, l=lower);
+    }
+
+    #[test]
+    fn set_flags_macro() {
+        let mut cpu = cpu_execute();
+        set_flags!(cpu, z h c);
+        assert_eq!(flags!(cpu, z h c), true);
+        set_flags!(cpu, n);
+        assert_eq!(flags!(cpu, z h c n), true);
     }
 
     #[test]
