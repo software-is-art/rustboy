@@ -322,19 +322,19 @@ macro_rules! daa {
             let half_carry = flags!(cpu, h);
             if (subtraction) {
                 if (carry) {
-                    *a -= 0x60;
+                    *a = a.wrapping_sub(0x60) as u8;
                     set_flags!(cpu, c);
                 }
                 if (half_carry) {
-                    *a -= 0x6;
+                    *a = a.wrapping_sub(0x6) as u8;
                 }
             } else {
                 if (carry || *a > 0x99) {
-                    *a += 0x60;
+                    *a = a.wrapping_add(0x60) as u8;
                     set_flags!(cpu, c);
                 }
                 if (half_carry || (*a & 0x0F) > 0x09) {
-                    *a += 0x6;
+                    *a = a.wrapping_add(0x6) as u8;
                 }
             }
         }
@@ -471,6 +471,7 @@ impl Z80<Decode> {
             0x24 => inc!(h),
             0x25 => dec!(h),
             0x26 => ld!([h], [u8]),
+            0x27 => daa!(),
             _ => panic!("Uh, oh")
         };
 
@@ -1264,6 +1265,38 @@ mod tests {
             }
         )
     }
+
+    #[test]
+    fn daa() {
+        let mut ones = 0;
+        let mut tens = 0;
+        for count in 0..255 {
+            let mut dca = tens << 4 | ones;
+            dca += 1;
+            ones += 1;
+            if ones == 10 {
+                ones = 0;
+                tens += 1;
+            }
+            if tens == 10 {
+                tens = 0;
+            }
+            let mut flags = 0;
+            if dca & 0b1111 == 0 {
+                flags |= flags!(h);
+            }
+            if dca == 0 {
+                flags = flags!(c);
+            }
+            let mut cpu = cpu_decode(0x27);
+            cpu.registers.a = dca;
+            cpu.registers.f = flags;
+            cpu.execute();
+            assert_eq!(ones, cpu.registers.a & 0b1111);
+            assert_eq!(tens, cpu.registers.a >> 4 & 0b1111);
+        }
+    }
+
 
 assert_ld_u16_x16!(b, c, 0x01);
 assert_ld_u16_x16!(d, e, 0x11);
