@@ -73,7 +73,7 @@ macro_rules! flags {
     ($($flag:tt)+) => {
         $(
             flags!($flag) |
-        )+ 0x0000_0000;
+        )+ 0x0000_0000
     };
 }
 
@@ -451,6 +451,7 @@ impl Z80<Decode> {
             0x25 => dec!(h),
             0x26 => ld!([h], [u8]),
             0x27 => daa!(),
+            0x28 => jr!([z], [i8]),
             _ => panic!("Uh, oh"),
         };
 
@@ -1077,13 +1078,13 @@ mod tests {
                 fn [<jr_ $($flag)+ _i8_forwards>]() {
                     assert_instruction! {
                         opcode : $opcode
-                        jr : [ [n z], [i8] ]
+                        jr : [[$($flag)+], [i8] ]
                         setup : {
                             mem_set : {
                                 1 : 25
                             },
                             reg_set : {
-                                f : $(flags!($flag) | )+ 0x0000_0000
+                                f : flags!($($flag)+)
                             }
                         }
                         assert : {
@@ -1091,6 +1092,50 @@ mod tests {
                                 m : 3,
                                 t : 12,
                                 pc : 27
+                            }
+                        }
+                    }
+                }
+                #[test]
+                fn [<jr_ $($flag)+ _i8_backwards>]() {
+                    assert_instruction! {
+                        opcode : $opcode
+                        jr : [[$($flag)+], [i8]]
+                        setup : {
+                            mem_set : {
+                                1 : (-25i8) as u8
+                            },
+                            reg_set : {
+                                f : flags!($($flag)+)
+                            }
+                        }
+                        assert : {
+                            reg_eq : {
+                                m : 3,
+                                t : 12,
+                                pc : 65513
+                            }
+                        }
+                    }
+                }
+                #[test]
+                fn [<jr_ $($flag)+ _i8_negation_no_branch>]() {
+                    assert_instruction! {
+                        opcode : $opcode
+                        jr : [[$($flag)+], [i8]]
+                        setup : {
+                            mem_set : {
+                                1 : 25
+                            },
+                            reg_set : {
+                                f : !flags!($($flag)+)
+                            }
+                        }
+                        assert : {
+                            reg_eq : {
+                                m : 2,
+                                t : 8,
+                                pc : 2
                             }
                         }
                     }
@@ -1533,74 +1578,6 @@ mod tests {
         }
     }
 
-    #[test]
-    fn jr_nz_i8_backwards() {
-        assert_instruction! {
-            opcode : 0x20
-            jr : [ [n z], [i8] ]
-            setup : {
-                mem_set : {
-                    1 : (-25i8) as u8
-                },
-                reg_set : {
-                    f : flags!(n z)
-                }
-            }
-            assert : {
-                reg_eq : {
-                    m : 3,
-                    t : 12,
-                    pc : 65513
-                }
-            }
-        }
-    }
-
-    #[test]
-    fn jr_nz_i8_missing_z_no_branch() {
-        assert_instruction! {
-            opcode : 0x20
-            jr : [ [n z], [i8] ]
-            setup : {
-                mem_set : {
-                    1 : 25
-                },
-                reg_set : {
-                    f : flags!(n)
-                }
-            }
-            assert : {
-                reg_eq : {
-                    m : 2,
-                    t : 8,
-                    pc : 2
-                }
-            }
-        }
-    }
-
-    #[test]
-    fn jr_nz_i8_missing_n_no_branch() {
-        assert_instruction! {
-            opcode : 0x20
-            jr : [ [n z], [i8] ]
-            setup : {
-                mem_set : {
-                    1 : 25
-                },
-                reg_set : {
-                    f : flags!(z)
-                }
-            }
-            assert : {
-                reg_eq : {
-                    m : 2,
-                    t : 8,
-                    pc : 2
-                }
-            }
-        }
-    }
-
     assert_flag_jr_i8!(0x20, n z);
+    assert_flag_jr_i8!(0x28, z);
 }
