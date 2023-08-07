@@ -1,25 +1,23 @@
-use std::fmt::{Debug, Formatter, Result};
 use paste::paste;
+use std::fmt::{Debug, Formatter, Result};
 
 macro_rules! concat_u8 {
     ($high:expr, $low:expr) => {
         ($high as u16) << 8 | ($low as u16)
-    }
+    };
 }
 
 macro_rules! split_u16 {
     ($value:expr) => {
         (($value as u16 >> 8) as u8, ($value as u16 & 0xFF) as u8)
-    }
+    };
 }
 
 macro_rules! m_time {
-    ($cpu:expr, $value:expr) => {
-        {
-            $cpu.registers.m += $value;
-            $cpu.registers.t += $value << 2;
-        }
-    }
+    ($cpu:expr, $value:expr) => {{
+        $cpu.registers.m += $value;
+        $cpu.registers.t += $value << 2;
+    }};
 }
 
 macro_rules! reg_set {
@@ -66,90 +64,85 @@ macro_rules! flags {
     (c) => {
         0b0001_0000
     };
+    ($cpu:expr, $($flag:tt)+) => {
+        {
+            let mask = flags!($($flag)+);
+            ($cpu.registers.f & mask) == mask
+        }
+    };
     ($($flag:tt)+) => {
         $(
             flags!($flag) |
-        )+ 0x0000_0000;
+        )+ 0x0000_0000
     };
 }
 
+macro_rules! set_flags {
+    ($cpu:expr, $($flag:tt)+) => {
+        {
+            let mask = flags!($($flag)+);
+            $cpu.registers.f |= mask;
+        }
+    };
+}
 
 macro_rules! read {
-    ($cpu:expr, u16) => {
-        {
-            let lower = $cpu.mmu.read_u8($cpu.registers.pc);
-            $cpu.registers.pc += 1;
-            let upper = $cpu.mmu.read_u8($cpu.registers.pc);
-            $cpu.registers.pc += 1;
-            m_time!($cpu, 2);
-            concat_u8!(upper, lower)
-        }
-    };
-    ($cpu:expr, u8) => {
-        {
-            let val = $cpu.mmu.read_u8($cpu.registers.pc);
-            m_time!($cpu, 1);
-            $cpu.registers.pc += 1;
-            val
-        }
-    };
-    ($cpu:expr, ($high:tt, $low:tt)) => {
-        {
-            m_time!($cpu, 1);
-            $cpu.mmu.read_u8(read!($cpu, $high, $low))
-        }
-    };
-    ($cpu:expr, $high:tt, $low:tt) => {
-        {
-            concat_u8!($cpu.registers.$high, $cpu.registers.$low)
-        }
-    };
+    ($cpu:expr, u16) => {{
+        let lower = $cpu.mmu.read_u8($cpu.registers.pc);
+        $cpu.registers.pc += 1;
+        let upper = $cpu.mmu.read_u8($cpu.registers.pc);
+        $cpu.registers.pc += 1;
+        m_time!($cpu, 2);
+        concat_u8!(upper, lower)
+    }};
+    ($cpu:expr, u8) => {{
+        let val = $cpu.mmu.read_u8($cpu.registers.pc);
+        m_time!($cpu, 1);
+        $cpu.registers.pc += 1;
+        val
+    }};
+    ($cpu:expr, ($high:tt, $low:tt)) => {{
+        m_time!($cpu, 1);
+        $cpu.mmu.read_u8(read!($cpu, $high, $low))
+    }};
+    ($cpu:expr, $high:tt, $low:tt) => {{
+        concat_u8!($cpu.registers.$high, $cpu.registers.$low)
+    }};
     ($cpu:expr, $r:tt) => {
         $cpu.registers.$r
     };
 }
 
 macro_rules! write {
-    ($cpu:expr, (u16), $value:expr) => {
-        {
-            let (upper, lower) = split_u16!($value);
-            let address = read!($cpu, u16);
-            $cpu.mmu.write_u8(address, lower);
-            $cpu.mmu.write_u8(address + 1, upper);
-            m_time!($cpu, 2);
-        }
-    };
-    ($cpu:expr, ($high:tt, $low:tt)+, $value:expr) => {
-        {
-            $cpu.mmu.write_u8(read!($cpu, $high, $low) + 1, $value);
-            m_time!($cpu, 1);
-        }
-    };
-    ($cpu:expr, ($high:tt, $low:tt), $value:expr) => {
-        {
-            $cpu.mmu.write_u8(read!($cpu, $high, $low), $value);
-            m_time!($cpu, 1);
-        }
-    };
-    ($cpu:expr, $high:tt, $low:tt, $value:expr) => {
-        {
-            let (upper, lower) = split_u16!($value);
-            $cpu.registers.$high = upper;
-            $cpu.registers.$low = lower;
-        }
-    };
-    ($cpu:expr, $r:tt, $value:expr) => {
-        {
-            $cpu.registers.$r = $value;
-        }
-    };
+    ($cpu:expr, (u16), $value:expr) => {{
+        let (upper, lower) = split_u16!($value);
+        let address = read!($cpu, u16);
+        $cpu.mmu.write_u8(address, lower);
+        $cpu.mmu.write_u8(address + 1, upper);
+        m_time!($cpu, 2);
+    }};
+    ($cpu:expr, ($high:tt, $low:tt)+, $value:expr) => {{
+        $cpu.mmu.write_u8(read!($cpu, $high, $low) + 1, $value);
+        m_time!($cpu, 1);
+    }};
+    ($cpu:expr, ($high:tt, $low:tt), $value:expr) => {{
+        $cpu.mmu.write_u8(read!($cpu, $high, $low), $value);
+        m_time!($cpu, 1);
+    }};
+    ($cpu:expr, $high:tt, $low:tt, $value:expr) => {{
+        let (upper, lower) = split_u16!($value);
+        $cpu.registers.$high = upper;
+        $cpu.registers.$low = lower;
+    }};
+    ($cpu:expr, $r:tt, $value:expr) => {{
+        $cpu.registers.$r = $value;
+    }};
 }
 
 macro_rules! nop {
     () => {
-        |cpu: &mut Z80<Execute>| {
-        }
-    }
+        |cpu: &mut Z80<Execute>| {}
+    };
 }
 
 macro_rules! ld {
@@ -202,11 +195,11 @@ macro_rules! dec {
             cpu.registers.f &= 0b0001_0000;
             let z = if new == 0 { 0b1000_0000 } else { 0b0000_0000 };
             let h = (((current ^ 1) ^ new) & 0b0001_0000) << 1;
-            const N : u8 = 0b0100_0000;
+            const N: u8 = 0b0100_0000;
             cpu.registers.f |= z | h | N;
             write!(cpu, $target, new);
         }
-    }
+    };
 }
 
 macro_rules! rlca {
@@ -217,7 +210,7 @@ macro_rules! rlca {
             cpu.registers.f = c << 4;
             write!(cpu, a, (val << 1) | c);
         }
-    }
+    };
 }
 
 macro_rules! rla {
@@ -228,7 +221,7 @@ macro_rules! rla {
             cpu.registers.f = (val & 0b1000_0000) >> 3;
             write!(cpu, a, (val << 1) | (c >> 4));
         }
-    }
+    };
 }
 
 macro_rules! rrca {
@@ -239,7 +232,7 @@ macro_rules! rrca {
             cpu.registers.f = c >> 3;
             write!(cpu, a, (val >> 1) | c);
         }
-    }
+    };
 }
 
 macro_rules! rra {
@@ -250,7 +243,7 @@ macro_rules! rra {
             cpu.registers.f = (val & 0b0000_0001) << 4;
             write!(cpu, a, (val >> 1) | c);
         }
-    }
+    };
 }
 
 macro_rules! add {
@@ -274,7 +267,7 @@ macro_rules! stop {
         |cpu: &mut Z80<Execute>| {
             cpu.registers.pc += 1;
         }
-    }
+    };
 }
 
 macro_rules! jr {
@@ -299,11 +292,39 @@ macro_rules! jr {
     };
 }
 
+macro_rules! daa {
+    () => {
+        |cpu: &mut Z80<Execute>| {
+            let a = &mut cpu.registers.a;
+            let subtraction = flags!(cpu, n);
+            let carry = flags!(cpu, c);
+            let half_carry = flags!(cpu, h);
+            if (subtraction) {
+                if (carry) {
+                    *a = a.wrapping_sub(0x60) as u8;
+                    set_flags!(cpu, c);
+                }
+                if (half_carry) {
+                    *a = a.wrapping_sub(0x6) as u8;
+                }
+            } else {
+                if (carry || *a > 0x99) {
+                    *a = a.wrapping_add(0x60) as u8;
+                    set_flags!(cpu, c);
+                }
+                if (half_carry || (*a & 0x0F) > 0x09) {
+                    *a = a.wrapping_add(0x6) as u8;
+                }
+            }
+        }
+    };
+}
+
 #[derive(Debug, PartialEq)]
 struct Z80<S: State> {
     registers: Registers,
     mmu: Mmu,
-    s: S
+    s: S,
 }
 
 #[derive(Debug, PartialEq)]
@@ -382,7 +403,7 @@ impl Z80<Fetch> {
                 pc: self.registers.pc + 1,
                 ..self.registers
             },
-            mmu: self.mmu
+            mmu: self.mmu,
         }
     }
 }
@@ -428,7 +449,10 @@ impl Z80<Decode> {
             0x23 => inc!(h, l),
             0x24 => inc!(h),
             0x25 => dec!(h),
-            _ => panic!("Uh, oh")
+            0x26 => ld!([h], [u8]),
+            0x27 => daa!(),
+            0x28 => jr!([z], [i8]),
+            _ => panic!("Uh, oh"),
         };
 
         Z80 {
@@ -436,7 +460,7 @@ impl Z80<Decode> {
                 instruction: Instruction::new(self.s.opcode, function),
             },
             registers: self.registers,
-            mmu: self.mmu
+            mmu: self.mmu,
         }
     }
 }
@@ -449,7 +473,7 @@ impl Z80<Execute> {
 
 struct Instruction {
     opcode: u8,
-    function: fn(&mut Z80<Execute>)
+    function: fn(&mut Z80<Execute>),
 }
 
 impl Debug for Instruction {
@@ -472,10 +496,7 @@ impl PartialEq for Instruction {
 
 impl Instruction {
     fn new(opcode: u8, function: fn(&mut Z80<Execute>)) -> Instruction {
-        Instruction {
-            opcode,
-            function,
-        }
+        Instruction { opcode, function }
     }
 }
 
@@ -987,7 +1008,7 @@ mod tests {
                     }
                 }
             }
-        }
+        };
     }
 
     macro_rules! assert_ld_indirect_src_x8 {
@@ -1018,7 +1039,7 @@ mod tests {
                     }
                 }
             }
-        }
+        };
     }
 
     macro_rules! assert_dec_x16 {
@@ -1047,6 +1068,79 @@ mod tests {
                     }
                 }
             }
+        };
+    }
+
+    macro_rules! assert_flag_jr_i8 {
+        ($opcode:expr, $($flag:tt)+) => {
+            paste! {
+                #[test]
+                fn [<jr_ $($flag)+ _i8_forwards>]() {
+                    assert_instruction! {
+                        opcode : $opcode
+                        jr : [[$($flag)+], [i8] ]
+                        setup : {
+                            mem_set : {
+                                1 : 25
+                            },
+                            reg_set : {
+                                f : flags!($($flag)+)
+                            }
+                        }
+                        assert : {
+                            reg_eq : {
+                                m : 3,
+                                t : 12,
+                                pc : 27
+                            }
+                        }
+                    }
+                }
+                #[test]
+                fn [<jr_ $($flag)+ _i8_backwards>]() {
+                    assert_instruction! {
+                        opcode : $opcode
+                        jr : [[$($flag)+], [i8]]
+                        setup : {
+                            mem_set : {
+                                1 : (-25i8) as u8
+                            },
+                            reg_set : {
+                                f : flags!($($flag)+)
+                            }
+                        }
+                        assert : {
+                            reg_eq : {
+                                m : 3,
+                                t : 12,
+                                pc : 65513
+                            }
+                        }
+                    }
+                }
+                #[test]
+                fn [<jr_ $($flag)+ _i8_negation_no_branch>]() {
+                    assert_instruction! {
+                        opcode : $opcode
+                        jr : [[$($flag)+], [i8]]
+                        setup : {
+                            mem_set : {
+                                1 : 25
+                            },
+                            reg_set : {
+                                f : !flags!($($flag)+)
+                            }
+                        }
+                        assert : {
+                            reg_eq : {
+                                m : 2,
+                                t : 8,
+                                pc : 2
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -1054,16 +1148,18 @@ mod tests {
         Z80 {
             s: Decode { opcode },
             mmu: Mmu::new(),
-            registers: Registers::new()
-        }.decode()
+            registers: Registers::new(),
+        }
+        .decode()
     }
 
     fn cpu_execute() -> Z80<Execute> {
         Z80 {
             s: Decode { opcode: 0x00 },
             mmu: Mmu::new(),
-            registers: Registers::new()
-        }.decode()
+            registers: Registers::new(),
+        }
+        .decode()
     }
 
     #[test]
@@ -1097,8 +1193,8 @@ mod tests {
     #[test]
     fn reg_set_macro() {
         let mut cpu = cpu_execute();
-        reg_set!(cpu, a=22, b=44);
-        reg_set!(cpu, c=1);
+        reg_set!(cpu, a = 22, b = 44);
+        reg_set!(cpu, c = 1);
         assert_eq!(22, cpu.registers.a);
         assert_eq!(44, cpu.registers.b);
         assert_eq!(1, cpu.registers.c);
@@ -1131,13 +1227,21 @@ mod tests {
         assert_eq!(0b0100_0000, flags!(n));
         assert_eq!(0b0010_0000, flags!(h));
         assert_eq!(0b0001_0000, flags!(c));
-        assert_eq!(flags!(z) | flags!(n) | flags!(h) | flags!(c), flags!(z n h c));
+        assert_eq!(
+            flags!(z) | flags!(n) | flags!(h) | flags!(c),
+            flags!(z n h c)
+        );
+        let mut cpu = cpu_execute();
+        cpu.registers.f = flags!(z c);
+        assert_eq!(flags!(cpu, z c), true);
+        assert_eq!(flags!(cpu, z c h), false);
+        assert_eq!(flags!(cpu, z), true);
     }
 
     #[test]
     fn read_macro() {
         let mut cpu = cpu_execute();
-        reg_set!(cpu, a=100, h=2, l=1);
+        reg_set!(cpu, a = 100, h = 2, l = 1);
         let address = concat_u8!(cpu.registers.h, cpu.registers.l);
         let value = 24 as u8;
         cpu.mmu.write_u8(address, value);
@@ -1158,8 +1262,8 @@ mod tests {
     #[test]
     fn write_macro() {
         let mut cpu = cpu_execute();
-        reg_set!(cpu, h=2, l=1);
-        let expected_u16 =  concat_u8!(cpu.registers.h, cpu.registers.l);
+        reg_set!(cpu, h = 2, l = 1);
+        let expected_u16 = concat_u8!(cpu.registers.h, cpu.registers.l);
         let expected_u8 = 10;
         // 8 bit register write
         write!(cpu, a, expected_u8);
@@ -1169,7 +1273,11 @@ mod tests {
         assert_eq!(expected_u16, concat_u8!(cpu.registers.b, cpu.registers.c));
         // 8 bit indirect memory write
         write!(cpu, (h, l), expected_u8);
-        assert_eq!(expected_u8, cpu.mmu.read_u8(concat_u8!(cpu.registers.h, cpu.registers.l)));
+        assert_eq!(
+            expected_u8,
+            cpu.mmu
+                .read_u8(concat_u8!(cpu.registers.h, cpu.registers.l))
+        );
     }
 
     #[test]
@@ -1183,12 +1291,21 @@ mod tests {
 
         // LD BC, u16
         ld!([b, c], [u16])(&mut cpu);
-        reg_eq!(cpu, b=upper, c=lower);
+        reg_eq!(cpu, b = upper, c = lower);
 
         // LD BC, HL
-        reg_set!(cpu, b=0, c=0, h=upper, l=lower);
+        reg_set!(cpu, b = 0, c = 0, h = upper, l = lower);
         ld!([b, c], [h, l])(&mut cpu);
-        reg_eq!(cpu, b=upper, c=lower, h=upper, l=lower);
+        reg_eq!(cpu, b = upper, c = lower, h = upper, l = lower);
+    }
+
+    #[test]
+    fn set_flags_macro() {
+        let mut cpu = cpu_execute();
+        set_flags!(cpu, z h c);
+        assert_eq!(flags!(cpu, z h c), true);
+        set_flags!(cpu, n);
+        assert_eq!(flags!(cpu, z h c n), true);
     }
 
     #[test]
@@ -1208,45 +1325,76 @@ mod tests {
         )
     }
 
-assert_ld_u16_x16!(b, c, 0x01);
-assert_ld_u16_x16!(d, e, 0x11);
-assert_ld_u16_x16!(h, l, 0x21);
+    #[test]
+    fn daa() {
+        let mut ones = 0;
+        let mut tens = 0;
+        for count in 0..255 {
+            let mut dca = tens << 4 | ones;
+            dca += 1;
+            ones += 1;
+            if ones == 10 {
+                ones = 0;
+                tens += 1;
+            }
+            if tens == 10 {
+                tens = 0;
+            }
+            let mut flags = 0;
+            if dca & 0b1111 == 0 {
+                flags |= flags!(h);
+            }
+            if dca == 0 {
+                flags = flags!(c);
+            }
+            let mut cpu = cpu_decode(0x27);
+            cpu.registers.a = dca;
+            cpu.registers.f = flags;
+            cpu.execute();
+            assert_eq!(ones, cpu.registers.a & 0b1111);
+            assert_eq!(tens, cpu.registers.a >> 4 & 0b1111);
+        }
+    }
 
-assert_ld_indirect_target_x8!([b, c], [a], 0x02);
-assert_ld_indirect_target_x8!([d, e], [a], 0x12);
+    assert_ld_u16_x16!(b, c, 0x01);
+    assert_ld_u16_x16!(d, e, 0x11);
+    assert_ld_u16_x16!(h, l, 0x21);
 
-assert_ld_indirect_target_x8_with_offset!([h, l]+, [a], 0x22);
+    assert_ld_indirect_target_x8!([b, c], [a], 0x02);
+    assert_ld_indirect_target_x8!([d, e], [a], 0x12);
 
+    assert_ld_indirect_target_x8_with_offset!([h, l]+, [a], 0x22);
 
-assert_inc_x16!(b, c, 0x03);
-assert_inc_x16!(d, e, 0x13);
-assert_inc_x16!(h, l, 0x23);
+    assert_inc_x16!(b, c, 0x03);
+    assert_inc_x16!(d, e, 0x13);
+    assert_inc_x16!(h, l, 0x23);
 
-assert_inc_x8!(b, 0x04);
-assert_inc_x8!(c, 0x0C);
-assert_inc_x8!(d, 0x14);
-assert_inc_x8!(e, 0x1C);
-assert_inc_x8!(h, 0x24);
+    assert_inc_x8!(b, 0x04);
+    assert_inc_x8!(c, 0x0C);
+    assert_inc_x8!(d, 0x14);
+    assert_inc_x8!(e, 0x1C);
+    assert_inc_x8!(h, 0x24);
 
-assert_dec_x8!(b, 0x05);
-assert_dec_x8!(c, 0x0D);
-assert_dec_x8!(d, 0x15);
-assert_dec_x8!(e, 0x1D);
-assert_dec_x8!(h, 0x25);
+    assert_dec_x8!(b, 0x05);
+    assert_dec_x8!(c, 0x0D);
+    assert_dec_x8!(d, 0x15);
+    assert_dec_x8!(e, 0x1D);
+    assert_dec_x8!(h, 0x25);
 
-assert_ld_u8!(b, 0x06);
-assert_ld_u8!(c, 0x0E);
-assert_ld_u8!(d, 0x16);
-assert_ld_u8!(e, 0x1E);
+    assert_ld_u8!(b, 0x06);
+    assert_ld_u8!(c, 0x0E);
+    assert_ld_u8!(d, 0x16);
+    assert_ld_u8!(e, 0x1E);
+    assert_ld_u8!(h, 0x26);
 
-assert_add_x16!([h, l], [b, c], 0x09);
-assert_add_x16!([h, l], [d, e], 0x19);
+    assert_add_x16!([h, l], [b, c], 0x09);
+    assert_add_x16!([h, l], [d, e], 0x19);
 
-assert_ld_indirect_src_x8!(a, [b, c], 0x0A);
-assert_ld_indirect_src_x8!(a, [d, e], 0x1A);
+    assert_ld_indirect_src_x8!(a, [b, c], 0x0A);
+    assert_ld_indirect_src_x8!(a, [d, e], 0x1A);
 
-assert_dec_x16!([b, c], 0x0B);
-assert_dec_x16!([d, e], 0x1B);
+    assert_dec_x16!([b, c], 0x0B);
+    assert_dec_x16!([d, e], 0x1B);
 
     #[test]
     fn rlca() {
@@ -1430,95 +1578,6 @@ assert_dec_x16!([d, e], 0x1B);
         }
     }
 
-    #[test]
-    fn jr_nz_i8_forwards() {
-        assert_instruction! {
-            opcode : 0x20
-            jr : [ [n z], [i8] ]
-            setup : {
-                mem_set : {
-                    1 : 25
-                },
-                reg_set : {
-                    f : flags!(n) | flags!(z)
-                }
-            }
-            assert : {
-                reg_eq : {
-                    m : 3,
-                    t : 12,
-                    pc : 27
-                }
-            }
-        }
-    }
-
-    #[test]
-    fn jr_nz_i8_backwards() {
-        assert_instruction! {
-            opcode : 0x20
-            jr : [ [n z], [i8] ]
-            setup : {
-                mem_set : {
-                    1 : (-25i8) as u8
-                },
-                reg_set : {
-                    f : flags!(n z)
-                }
-            }
-            assert : {
-                reg_eq : {
-                    m : 3,
-                    t : 12,
-                    pc : 65513
-                }
-            }
-        }
-    }
-
-    #[test]
-    fn jr_nz_i8_missing_z_no_branch() {
-        assert_instruction! {
-            opcode : 0x20
-            jr : [ [n z], [i8] ]
-            setup : {
-                mem_set : {
-                    1 : 25
-                },
-                reg_set : {
-                    f : flags!(n)
-                }
-            }
-            assert : {
-                reg_eq : {
-                    m : 2,
-                    t : 8,
-                    pc : 2
-                }
-            }
-        }
-    }
-
-    #[test]
-    fn jr_nz_i8_missing_n_no_branch() {
-        assert_instruction! {
-            opcode : 0x20
-            jr : [ [n z], [i8] ]
-            setup : {
-                mem_set : {
-                    1 : 25
-                },
-                reg_set : {
-                    f : flags!(z)
-                }
-            }
-            assert : {
-                reg_eq : {
-                    m : 2,
-                    t : 8,
-                    pc : 2
-                }
-            }
-        }
-    }
+    assert_flag_jr_i8!(0x20, n z);
+    assert_flag_jr_i8!(0x28, z);
 }
